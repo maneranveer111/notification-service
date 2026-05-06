@@ -21,7 +21,7 @@ class Notification(Base):
     channel: Mapped[str] = mapped_column(String(20), nullable=False)
 
     # Destination: email address or phone number
-    to: Mapped[str] = mapped_column(String(255), nullable=False)
+    recipient: Mapped[str] = mapped_column(String(255), nullable=False)
 
     # Email-specific fields
     subject: Mapped[str | None] = mapped_column(String(255), nullable=True)

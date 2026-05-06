@@ -4,13 +4,16 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import get_db
+from app.api.notifications import router as notifications_router
 
 settings = get_settings()
 
 app = FastAPI(
     title=settings.app_name,
     debug=settings.debug
-    )
+)
+
+app.include_router(notifications_router)
 
 @app.get("/health")
 def health():
