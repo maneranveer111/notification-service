@@ -1,12 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from uuid import UUID
+
 from app.database import get_db
 from app.models.notification import Notification
 from app.schemas.notification import (
     EmailNotificationCreate,
     NotificationQueued,
     SMSNotificationCreate,
+    NotificationRead,
 )
 from app.tasks.notification_tasks import send_email_task, send_sms_task
 
@@ -59,3 +62,20 @@ def queue_sms(payload: SMSNotificationCreate, db: Session = Depends(get_db)):
         status=notification.status,
         channel=notification.channel,
     )
+
+@router.get("/{notification_id}", response_model=NotificationRead)
+def get_notification(notification_id: UUID, db: Session = Depends(get_db)):
+    """
+    Fetch a notification by its ID.
+    why this exists:
+    - Client apps queue a notification (POST)
+    - They get back an id immediately
+    - Later they can call this endpoint to check status (pending/sent/failed)
+    """
+    notification = db.get(Notification, notification_id)
+
+    if not notification:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    
+    return notification
+
