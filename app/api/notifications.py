@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 from uuid import UUID
 
@@ -62,6 +63,31 @@ def queue_sms(payload: SMSNotificationCreate, db: Session = Depends(get_db)):
         status=notification.status,
         channel=notification.channel,
     )
+
+@router.get("", response_model=list[NotificationRead])
+def list_notifications(
+    db: Session = Depends(get_db),
+    status: str | None = Query(default=None, description="Filter by status (pending/sent/failed/...)"),
+    channel: str | None = Query(default=None, description="Filter by channel (email/sms)"),
+    limit: int = Query(default=50, ge=1, le=200, description="Number of records to return"),
+    offset: int = Query(default=0, ge=0, description="Number of records to skip"),
+):
+    """
+    List notifications with optional filters and pagination.
+
+    - limit/offset implement simple pagination
+    - ordering newest-first helps see latest activity quickly
+    """
+    stmt = select(Notification).order_by(Notification.created_at.desc()).offset(offset).limit(limit)
+
+    if status:
+        stmt = stmt.where(Notification.status == status)
+
+    if channel:
+        stmt = stmt.where(Notification.channel == channel)
+
+    notifications = db.execute(stmt).scalars().all()
+    return notifications
 
 @router.get("/{notification_id}", response_model=NotificationRead)
 def get_notification(notification_id: UUID, db: Session = Depends(get_db)):
