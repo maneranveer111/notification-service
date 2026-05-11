@@ -9,7 +9,7 @@ from app.celery_app import celery
 from app.database import SessionLocal
 from app.models.notification import Notification
 from app.services.email_service import send_email
-
+from app.services.sms_service import send_sms
 # Logger for this module
 logger = logging.getLogger(__name__)
 
@@ -129,6 +129,7 @@ def send_email_task(self, notification_id: str) -> dict:
         db.close()
 
 
+
 @celery.task(
     bind=True,
     base=NotificationTask,
@@ -137,14 +138,12 @@ def send_email_task(self, notification_id: str) -> dict:
     default_retry_delay=60,
 )
 def send_sms_task(self, notification_id: str) -> dict:
-    """
-    Background task to send an SMS notification.
-    For now: simulates sending (prints log).
-    Later: calls Twilio API.
-    """
+    from app.services.sms_service import send_sms
+
     logger.info(f"Processing SMS notification: {notification_id}")
 
     db: Session = SessionLocal()
+
     try:
         notification = db.get(Notification, UUID(notification_id))
 
@@ -152,24 +151,31 @@ def send_sms_task(self, notification_id: str) -> dict:
             logger.error(f"Notification {notification_id} not found in DB")
             return {"status": "error", "reason": "not found"}
 
+        # Mark as processing
         notification.status = "processing"
         notification.attempt_count += 1
         db.commit()
 
-        # Simulate SMS sending
-        logger.info(f"[SIMULATED] Sending SMS to {notification.recipient}")
-        logger.info(f"Message: {notification.body}")
+        # Send SMS via Twilio
+        sms_sid = send_sms(
+            recipient=notification.recipient,
+            message=notification.body,
+        )
 
+        #  Mark as sent
         notification.status = "sent"
         notification.sent_at = datetime.now(timezone.utc)
+        notification.provider_message_id = sms_sid
         db.commit()
 
-        logger.info(f"SMS notification {notification_id} marked as sent")
+        logger.info(f"SMS sent successfully. Twilio SID: {sms_sid}")
+
         return {"status": "sent", "notification_id": notification_id}
 
     except Exception as exc:
         db.rollback()
         logger.error(f"Error processing SMS {notification_id}: {exc}")
+
         raise self.retry(exc=exc)
 
     finally:
