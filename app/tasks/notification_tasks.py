@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.celery_app import celery
 from app.database import SessionLocal
 from app.models.notification import Notification
+from app.services.email_service import send_email
 
 # Logger for this module
 logger = logging.getLogger(__name__)
@@ -101,16 +102,19 @@ def send_email_task(self, notification_id: str) -> dict:
         notification.attempt_count += 1
         db.commit()
 
-        # Step 3: Simulate sending (we'll replace this with SendGrid later)
-        logger.info(f"[SIMULATED] Sending email to {notification.recipient}")
-        logger.info(f"Subject: {notification.subject}")
-        logger.info(f"Body: {notification.body}")
+        message_id = send_email(
+            recipient=notification.recipient,
+            subject=notification.subject,
+            body=notification.body,
+        )
 
         # Step 4: Mark as sent
         notification.status = "sent"
         notification.sent_at = datetime.now(timezone.utc)
+        notification.provider_message_id = message_id
         db.commit()
 
+        logger.info(f"Email sent successfully. Provider message ID. {message_id}")
         logger.info(f"Email notification {notification_id} marked as sent")
         return {"status": "sent", "notification_id": notification_id}
 
