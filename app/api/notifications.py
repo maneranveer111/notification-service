@@ -105,3 +105,49 @@ def get_notification(notification_id: UUID, db: Session = Depends(get_db)):
     
     return notification
 
+
+@router.post("/{notification_id}/retry", response_model=NotificationQueued)
+def retry_notification(notification_id: UUID, db: Session = Depends(get_db)):
+    """
+    Manually retry a failed notification.
+
+    Why this exists:
+    - Automatic retries (Celery) happen during task execution
+    - But after max_retries is exhausted, status becomes "failed"
+    - This endpoint allows manual re-queuing of failed notifications
+    - Resets attempt_count and error_message before retrying
+    """
+
+    # Step 1: Find the notification
+    notification = db.get(Notification, notification_id)
+
+    if not notification:
+        raise HTTPException(status_code=404, detail="Notification not found")
+
+    # Step 2: Only allow retry if status is "failed"
+    if notification.status not in ["failed", "retrying"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot retry notification with status '{notification.status}'. Only failed/retrying notifications can be retried."
+        )
+
+    # Step 3: Reset notification for fresh retry
+    notification.status = "pending"
+    notification.attempt_count = 0
+    notification.error_message = None
+    notification.provider_message_id = None
+    notification.sent_at = None
+    db.commit()
+    db.refresh(notification)
+
+    # Step 4: Re-queue correct task based on channel
+    if notification.channel == "email":
+        send_email_task.delay(str(notification.id))
+    elif notification.channel == "sms":
+        send_sms_task.delay(str(notification.id))
+
+    return NotificationQueued(
+        id=notification.id,
+        status=notification.status,
+        channel=notification.channel,
+    )
