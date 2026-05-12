@@ -1,3 +1,6 @@
+from app.security import verify_api_key
+from fastapi import Security
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -14,7 +17,10 @@ from app.schemas.notification import (
 )
 from app.tasks.notification_tasks import send_email_task, send_sms_task
 
-router = APIRouter(prefix="/notifications", tags=["Notifications"])
+router = APIRouter(prefix="/notifications", 
+                   tags=["Notifications"],
+                   dependencies=[Security(verify_api_key)],
+                )
 
 
 @router.post("/email", response_model=NotificationQueued)
