@@ -1,3 +1,5 @@
+from fastapi import Request
+from app.limiter import limiter
 from app.security import verify_api_key
 from fastapi import Security
 
@@ -24,7 +26,8 @@ router = APIRouter(prefix="/notifications",
 
 
 @router.post("/email", response_model=NotificationQueued)
-def queue_email(payload: EmailNotificationCreate, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def queue_email(request: Request, payload: EmailNotificationCreate, db: Session = Depends(get_db)):
     # Step 1: Save to DB with status=pending
     notification = Notification(
         channel="email",
@@ -50,7 +53,8 @@ def queue_email(payload: EmailNotificationCreate, db: Session = Depends(get_db))
 
 
 @router.post("/sms", response_model=NotificationQueued)
-def queue_sms(payload: SMSNotificationCreate, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def queue_sms(request: Request, payload: SMSNotificationCreate, db: Session = Depends(get_db)):
     notification = Notification(
         channel="sms",
         recipient=payload.recipient,
@@ -71,7 +75,9 @@ def queue_sms(payload: SMSNotificationCreate, db: Session = Depends(get_db)):
     )
 
 @router.get("", response_model=list[NotificationRead])
+@limiter.limit("60/minute")
 def list_notifications(
+    request: Request,
     db: Session = Depends(get_db),
     status: str | None = Query(default=None, description="Filter by status (pending/sent/failed/...)"),
     channel: str | None = Query(default=None, description="Filter by channel (email/sms)"),
@@ -96,7 +102,8 @@ def list_notifications(
     return notifications
 
 @router.get("/{notification_id}", response_model=NotificationRead)
-def get_notification(notification_id: UUID, db: Session = Depends(get_db)):
+@limiter.limit("60/minute")
+def get_notification(request: Request, notification_id: UUID, db: Session = Depends(get_db)):
     """
     Fetch a notification by its ID.
     why this exists:
@@ -113,7 +120,8 @@ def get_notification(notification_id: UUID, db: Session = Depends(get_db)):
 
 
 @router.post("/{notification_id}/retry", response_model=NotificationQueued)
-def retry_notification(notification_id: UUID, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def retry_notification(request: Request, notification_id: UUID, db: Session = Depends(get_db)):
     """
     Manually retry a failed notification.
 
