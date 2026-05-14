@@ -1,7 +1,7 @@
 from uuid import UUID
 from datetime import datetime
 
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, ConfigDict
 
 
 class EmailNotificationCreate(BaseModel):
@@ -20,8 +20,8 @@ class NotificationQueued(BaseModel):
     status: str
     channel: str
 
-    class Config:
-        from_attributes = True  # allows reading from SQLAlchemy model directly
+    # allows reading from SQLAlchemy model directly
+    model_config = ConfigDict(from_attributes=True)
 
 class NotificationRead(BaseModel):
     """
@@ -50,4 +50,4 @@ class NotificationRead(BaseModel):
     created_at : datetime
     updated_at: datetime
 
-    model_config = {"from_attributes" : True}
+    model_config = ConfigDict(from_attributes=True)
