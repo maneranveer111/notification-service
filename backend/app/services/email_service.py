@@ -1,45 +1,45 @@
 import logging
 
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail
+import requests
 
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
+
 
 def send_email(recipient: str, subject: str, body: str) -> str | None:
     """
-    Send an email using SendGrid API.
+    Send an email using Brevo's transactional email API.
 
     Returns:
         provider_message_id (str) if successful
         None if failed (raises exception)
 
-    Why we return provider_message_id?
-        SendGrid returns a unique message ID in response headers.
-        We store it in DB so we can trace the email in SendGrid dashboard later.
     """
 
-    # Step 1: Build the email object
-    message = Mail(
-        from_email=settings.sendgrid_from_email,
-        to_emails=recipient,
-        subject=subject,
-        plain_text_content=body,
-    )
+    payload = {
+        "sender": {"email": settings.brevo_from_email},
+        "to": [{"email": recipient}],
+        "subject": subject,
+        "textContent": body,
+    }
 
-    # Step 2: Send via SendGrid client
-    client = SendGridAPIClient(api_key=settings.sendgrid_api_key)
-    response = client.send(message)
+    headers = {
+        "accept": "application/json",
+        "api-key": settings.brevo_api_key,
+        "content-type": "application/json",
+    }
 
-    # Step 3: Log response
-    logger.info(f"SendGrid response status: {response.status_code}")
+    response = requests.post(BREVO_API_URL, json=payload, headers=headers, timeout=10)
+    response.raise_for_status()  
 
-    # Step 4: Extract message ID from headers
-    # SendGrid returns X-Message-Id in response headers
-    message_id = response.headers.get("X-Message-Id", None)
-    logger.info(f"SendGrid message ID: {message_id}")
+    logger.info(f"Brevo response status: {response.status_code}")
+
+    data = response.json()
+    message_id = data.get("messageId", None)
+    logger.info(f"Brevo message ID: {message_id}")
 
     return message_id

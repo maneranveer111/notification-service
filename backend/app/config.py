@@ -18,8 +18,8 @@ class Settings(BaseSettings):
     database_url: str
     redis_url: str = "redis://localhost:6379"
 
-    sendgrid_api_key: str | None = None
-    sendgrid_from_email: str | None = None
+    brevo_api_key: str | None = None
+    brevo_from_email: str | None = None
 
     twilio_account_sid: str | None = None
     twilio_auth_token: str | None = None

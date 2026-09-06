@@ -34,7 +34,7 @@ def queue_email(request: Request, payload: EmailNotificationCreate, db: Session 
         recipient=payload.recipient,
         subject=payload.subject,
         body=payload.body,
-        provider="sendgrid",
+        provider="brevo",
         status="pending",
     )
     db.add(notification)
