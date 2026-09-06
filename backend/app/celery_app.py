@@ -4,7 +4,6 @@ from app.config import get_settings
 
 settings = get_settings()
 
-# Create the Celery application
 celery = Celery(
     "notification_service",  # name of this Celery app
     broker=settings.redis_url,   # Redis: where jobs WAIT
@@ -27,4 +26,6 @@ celery.conf.update(
 
     # Retry policy: if broker (Redis) is down, retry connecting
     broker_connection_retry_on_startup=True,
+
+    task_default_queue="notification_service_queue",
 )
