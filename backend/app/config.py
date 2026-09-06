@@ -27,6 +27,8 @@ class Settings(BaseSettings):
 
     api_key: str
 
+    frontend_url: str = "http://localhost:5173"
+
 @lru_cache
 def get_settings() -> Settings:
     # Cached: first call creates Settings(), later calls reuse same object

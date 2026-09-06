@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, Request
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from fastapi.responses import JSONResponse
@@ -15,6 +16,14 @@ settings = get_settings()
 app = FastAPI(
     title=settings.app_name,
     debug=settings.debug
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[settings.frontend_url],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.state.limiter = limiter
