@@ -74,11 +74,13 @@ class NotificationTask(Task):
 
 
 @celery.task(
-    bind=True,                    # gives access to `self` (the task instance)
-    base=NotificationTask,        # use our custom base class
+    bind=True,                    
+    base=NotificationTask,       
     name="notifications.send_email",
-    max_retries=3,                # retry up to 3 times
-    default_retry_delay=60,       # wait 60 seconds before retry
+    max_retries=3,               
+    retry_backoff=True,           
+    retry_backoff_max=600,        
+    retry_jitter=True,            
 )
 def send_email_task(self, notification_id: str) -> dict:
     """
@@ -135,7 +137,9 @@ def send_email_task(self, notification_id: str) -> dict:
     base=NotificationTask,
     name="notifications.send_sms",
     max_retries=3,
-    default_retry_delay=60,
+    retry_backoff=True,
+    retry_backoff_max=600,
+    retry_jitter=True,
 )
 def send_sms_task(self, notification_id: str) -> dict:
     from app.services.sms_service import send_sms
