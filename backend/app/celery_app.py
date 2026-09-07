@@ -6,10 +6,10 @@ settings = get_settings()
 
 # Create the Celery application
 celery = Celery(
-    "notification_service",  
-    broker=settings.redis_url,  
-    backend=settings.redis_url,  
-    include=["app.tasks.notification_tasks"],  
+    "notification_service",  # name of this Celery app
+    broker=settings.redis_url,   # Redis: where jobs WAIT
+    backend=settings.redis_url,  # Redis: where results are STORED
+    include=["app.tasks.notification_tasks"],  # where our tasks live
 )
 
 celery.conf.update(
@@ -39,4 +39,8 @@ celery.conf.update(
 
     broker_connection_retry=True,
     broker_connection_max_retries=5,
+
+    task_acks_late=True,
+
+    worker_prefetch_multiplier=1,
 )
