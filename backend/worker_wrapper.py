@@ -22,6 +22,7 @@ def start_celery():
             "worker",
             "--loglevel=info",
             "-Q", "notification_service_queue",
+            "--pool=solo",
         ]
     )
 
