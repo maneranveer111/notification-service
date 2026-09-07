@@ -40,7 +40,17 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-50 py-10 px-4">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Notification Service</h1>
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-1">
+            <div className="bg-blue-600 rounded-lg p-2">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+            </div>
+            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Notification Service</h1>
+          </div>
+          <p className="text-gray-500 text-sm ml-[52px]">Send emails and SMS, track delivery status in real time</p>
+        </div>
 
         <SendForm onSent={fetchNotifications} />
 

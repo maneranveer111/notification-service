@@ -16,7 +16,8 @@ export default function NotificationList({ notifications, onRetry, retryingId })
 
   return (
     <div className="bg-white rounded-lg shadow overflow-hidden">
-      <table className="w-full text-sm">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
         <thead className="bg-gray-50 text-gray-600 text-left">
           <tr>
             <th className="px-4 py-3">Channel</th>
@@ -62,6 +63,7 @@ export default function NotificationList({ notifications, onRetry, retryingId })
           ))}
         </tbody>
       </table>
+    </div>
     </div>
   );
 }
