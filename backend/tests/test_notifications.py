@@ -266,3 +266,50 @@ class TestListNotifications:
 
         # Should return at most 2 items
         assert len(data) <= 2
+
+class TestRetryNotification:
+    """
+    Tests for POST /notifications/{id}/retry endpoint.
+    """
+
+    def test_retry_notification_not_found(self):
+        """
+        Test that retrying a non-existent notification returns 404.
+        """
+        fake_id = "00000000-0000-0000-0000-000000000000"
+
+        response = client.post(
+            f"/notifications/{fake_id}/retry",
+            headers=HEADERS
+        )
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Notification not found"
+
+    def test_retry_notification_wrong_status(self):
+        """
+        Test that retrying a notification that isn't failed/retrying
+        (e.g. still pending) returns 400.
+        """
+        with patch("app.api.notifications.send_email_task") as mock_task:
+            mock_task.delay = MagicMock(return_value=None)
+
+            create_response = client.post(
+                "/notifications/email",
+                headers=HEADERS,
+                json={
+                    "recipient": "test@example.com",
+                    "subject": "Test",
+                    "body": "Test body"
+                }
+            )
+
+        notification_id = create_response.json()["id"]
+
+        retry_response = client.post(
+            f"/notifications/{notification_id}/retry",
+            headers=HEADERS
+        )
+
+        assert retry_response.status_code == 400
+        assert "Cannot retry" in retry_response.json()["detail"]
