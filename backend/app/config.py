@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     database_url: str
     redis_url: str = "redis://localhost:6379"
 
+    db_pool_size: int = 5        
+    db_max_overflow: int = 5     
+    db_pool_timeout: int = 30    
+    db_pool_recycle: int = 1800  
+    
     brevo_api_key: str | None = None
     brevo_from_email: str | None = None
 
@@ -28,6 +33,7 @@ class Settings(BaseSettings):
     api_key: str
 
     frontend_url: str = "http://localhost:5173"
+
 
 @lru_cache
 def get_settings() -> Settings:

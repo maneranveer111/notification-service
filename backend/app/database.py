@@ -5,16 +5,27 @@ from app.config import get_settings
 
 settings = get_settings()
 
+
 class Base(DeclarativeBase):
     """
     Base class for all ORM models.
     Every table model will inherit from this Base.
     """
+
     pass
+
 
 engine = create_engine(
     settings.database_url,
+
     pool_pre_ping=True,
+
+    pool_recycle=settings.db_pool_recycle,
+
+    pool_size=settings.db_pool_size,
+    max_overflow=settings.db_max_overflow,
+
+    pool_timeout=settings.db_pool_timeout,
 )
 
 SessionLocal = sessionmaker(
@@ -22,6 +33,7 @@ SessionLocal = sessionmaker(
     autoflush=False,
     autocommit=False,
 )
+
 
 def get_db():
     """

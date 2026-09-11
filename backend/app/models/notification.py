@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import String, Text, DateTime, Integer, func
+from sqlalchemy import String, Text, DateTime, Integer, Index, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -13,34 +13,44 @@ class Notification(Base):
     This class maps to a DB table.
     Each instance of Notification = one row in the notifications table.
     """
+
     __tablename__ = "notifications"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    __table_args__ = (
+        Index("ix_notifications_status_created", "status", "created_at"),
+   
+        Index("ix_notifications_recipient", "recipient"),
 
-    # "email" or "sms"
+        Index("ix_notifications_provider_message_id", "provider_message_id"),
+
+        Index("ix_notifications_created_at", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+
     channel: Mapped[str] = mapped_column(String(20), nullable=False)
 
-    # Destination: email address or phone number
     recipient: Mapped[str] = mapped_column(String(255), nullable=False)
 
-    # Email-specific fields
     subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
     body: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Status tracking: pending -> sent OR failed
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
 
-    # Retry tracking
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
 
-    # For debugging/provider tracking
-    provider: Mapped[str | None] = mapped_column(String(50), nullable=True)  # "sendgrid" / "twilio"
+    provider: Mapped[str | None] = mapped_column(
+        String(50), nullable=True
+    )  # "sendgrid" / "twilio"
     provider_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Timestamps
-    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -51,5 +61,5 @@ class Notification(Base):
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
-        onupdate=func.now(),  # update timestamp on row update
+        onupdate=func.now(),  
     )
