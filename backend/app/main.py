@@ -10,7 +10,10 @@ from app.config import get_settings
 from app.database import get_db
 from app.api.notifications import router as notifications_router
 from app.api.webhooks import router as webhooks_router
+from app.api.admin import router as admin_router
+from app.api.templates import router as templates_router
 from app.limiter import limiter, rate_limit_exceeded_handler
+from app.security import ClientRateLimitExceeded
 
 settings = get_settings()
 
@@ -31,8 +34,23 @@ app.state.limiter = limiter
 
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
+
+@app.exception_handler(ClientRateLimitExceeded)
+def client_rate_limit_exceeded_handler(request: Request, exc: ClientRateLimitExceeded) -> JSONResponse:
+    return JSONResponse(
+        status_code=429,
+        content={
+            "detail": "Rate limit exceeded. Try again later.",
+            "limit": exc.limit,
+            "retry_after": "60 seconds",
+        },
+        headers={"Retry-After": "60"},
+    )
+
 app.include_router(notifications_router)
 app.include_router(webhooks_router)
+app.include_router(admin_router)
+app.include_router(templates_router)
 
 @app.get("/health")
 def health():

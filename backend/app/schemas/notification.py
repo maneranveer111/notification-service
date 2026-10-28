@@ -5,14 +5,18 @@ from pydantic import BaseModel, Field, EmailStr, ConfigDict
 
 
 class EmailNotificationCreate(BaseModel):
-    recipient: EmailStr                            # validates email format automatically
-    subject: str = Field(..., min_length=1, max_length=255)
-    body: str = Field(..., min_length=1)
+    recipient: EmailStr
+    subject: str | None = Field(default=None, max_length=255)
+    body: str | None = Field(default=None)
+    template_id: UUID | None = None
+    variables: dict[str, str | int | float] | None = None
 
 
 class SMSNotificationCreate(BaseModel):
-    recipient: str = Field(..., min_length=10, max_length=15)  # phone number
-    message: str = Field(..., min_length=1, max_length=1600)
+    recipient: str = Field(..., min_length=10, max_length=15)
+    message: str | None = Field(default=None, max_length=1600)
+    template_id: UUID | None = None
+    variables: dict[str, str | int | float] | None = None
 
 
 class NotificationQueued(BaseModel):
@@ -20,18 +24,10 @@ class NotificationQueued(BaseModel):
     status: str
     channel: str
 
-    # allows reading from SQLAlchemy model directly
     model_config = ConfigDict(from_attributes=True)
 
 
 class NotificationRead(BaseModel):
-    """
-    Response schema for reading notification from the DB.
-    why we need this 
-    - Controls what fields we return to the client
-    - Provides consistent output format
-    - Enables FastAPI docs to show exact response structue
-    """
     id: UUID
     channel: str
     recipient: str
@@ -51,5 +47,8 @@ class NotificationRead(BaseModel):
     sent_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+
+    client_id: UUID | None = None
+    template_id: UUID | None = None
 
     model_config = ConfigDict(from_attributes=True)
