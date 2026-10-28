@@ -22,6 +22,19 @@ class Settings(BaseSettings):
     db_max_overflow: int = 5     
     db_pool_timeout: int = 30    
     db_pool_recycle: int = 1800  
+    celery_queue: str = "notification_service_queue"
+
+    public_base_url: str = "http://localhost:8001"
+    webhook_secret: str | None = None
+    webhook_verify: bool = True
+
+    email_provider_order: str = "brevo,smtp"
+    smtp_host: str | None = None
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    smtp_from_email: str | None = None
+    smtp_port: int = 587
+    smtp_use_tls: bool = True
     
     brevo_api_key: str | None = None
     brevo_from_email: str | None = None

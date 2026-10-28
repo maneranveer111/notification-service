@@ -29,6 +29,7 @@ if config.config_file_name is not None:
 
 from app.database import Base
 from app.models.notification import Notification  # important: ensures model is imported
+from app.models.delivery_event import DeliveryEvent
 
 target_metadata = Base.metadata
 

@@ -24,7 +24,7 @@ celery.conf.update(
 
     broker_connection_retry_on_startup=True,
 
-    task_default_queue="notification_service_queue",
+    task_default_queue=settings.celery_queue,
 
     broker_transport_options={
         "socket_keepalive": True,

@@ -23,6 +23,7 @@ class NotificationQueued(BaseModel):
     # allows reading from SQLAlchemy model directly
     model_config = ConfigDict(from_attributes=True)
 
+
 class NotificationRead(BaseModel):
     """
     Response schema for reading notification from the DB.
@@ -40,14 +41,15 @@ class NotificationRead(BaseModel):
 
     status: str
     attempt_count: int
-    max_attempts : int
+    max_attempts: int
 
     provider: str | None = None
     provider_message_id: str | None = None  
     error_message: str | None = None
 
+    delivered_at: datetime | None = None
     sent_at: datetime | None = None
-    created_at : datetime
+    created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

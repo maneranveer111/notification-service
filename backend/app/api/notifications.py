@@ -1,74 +1,164 @@
-from fastapi import Request
-from app.limiter import limiter
-from app.security import verify_api_key
-from fastapi import Security
-
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import select, update, func
-
+import hashlib
+import json
 from uuid import UUID
 
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, Security
+from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
 from app.database import get_db
+from app.limiter import limiter
 from app.models.notification import Notification
 from app.schemas.notification import (
     EmailNotificationCreate,
     NotificationQueued,
-    SMSNotificationCreate,
     NotificationRead,
+    SMSNotificationCreate,
 )
+from app.security import verify_api_key
 from app.tasks.notification_tasks import send_email_task, send_sms_task
 
-router = APIRouter(prefix="/notifications",
-                   tags=["Notifications"],
-                   dependencies=[Security(verify_api_key)],
+router = APIRouter(
+    prefix="/notifications",
+    tags=["Notifications"],
+    dependencies=[Security(verify_api_key)],
+)
+
+
+def _compute_request_hash(channel: str, recipient: str, subject: str | None, body: str | None) -> str:
+    payload_dict = {
+        "channel": channel,
+        "recipient": recipient,
+        "subject": subject,
+        "body": body,
+    }
+    payload_json = json.dumps(payload_dict, sort_keys=True)
+    return hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
+
+
+def _queue_notification(
+    channel: str,
+    recipient: str,
+    body: str | None,
+    subject: str | None,
+    provider: str,
+    task_delay_fn,
+    db: Session,
+    response: Response,
+    idempotency_key: str | None = None,
+) -> NotificationQueued:
+    request_hash = None
+    if idempotency_key:
+        request_hash = _compute_request_hash(
+            channel=channel,
+            recipient=recipient,
+            subject=subject,
+            body=body,
+        )
+
+        existing = db.execute(
+            select(Notification).where(Notification.idempotency_key == idempotency_key)
+        ).scalar_one_or_none()
+
+        if existing:
+            if existing.request_hash != request_hash:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Idempotency-Key reused with a different request",
                 )
+            response.headers["Idempotent-Replay"] = "true"
+            return NotificationQueued(
+                id=existing.id,
+                status=existing.status,
+                channel=existing.channel,
+            )
+
+    notification = Notification(
+        channel=channel,
+        recipient=recipient,
+        subject=subject,
+        body=body,
+        provider=provider,
+        status="pending",
+        idempotency_key=idempotency_key,
+        request_hash=request_hash,
+    )
+    db.add(notification)
+
+    try:
+        db.commit()
+        db.refresh(notification)
+    except IntegrityError:
+        db.rollback()
+        if idempotency_key:
+            existing = db.execute(
+                select(Notification).where(Notification.idempotency_key == idempotency_key)
+            ).scalar_one_or_none()
+            if existing:
+                if existing.request_hash != request_hash:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="Idempotency-Key reused with a different request",
+                    )
+                response.headers["Idempotent-Replay"] = "true"
+                return NotificationQueued(
+                    id=existing.id,
+                    status=existing.status,
+                    channel=existing.channel,
+                )
+        raise
+
+    task_delay_fn(str(notification.id))
+
+    return NotificationQueued(
+        id=notification.id,
+        status=notification.status,
+        channel=notification.channel,
+    )
 
 
 @router.post("/email", response_model=NotificationQueued)
 @limiter.limit("10/minute")
-def queue_email(request: Request, payload: EmailNotificationCreate, db: Session = Depends(get_db)):
-    notification = Notification(
+def queue_email(
+    request: Request,
+    response: Response,
+    payload: EmailNotificationCreate,
+    db: Session = Depends(get_db),
+    idempotency_key: str | None = Header(default=None, max_length=255),
+):
+    return _queue_notification(
         channel="email",
         recipient=payload.recipient,
         subject=payload.subject,
         body=payload.body,
         provider="brevo",
-        status="pending",
-    )
-    db.add(notification)
-    db.commit()
-    db.refresh(notification)
-
-    send_email_task.delay(str(notification.id))
-
-    return NotificationQueued(
-        id=notification.id,
-        status=notification.status,
-        channel=notification.channel,
+        task_delay_fn=send_email_task.delay,
+        db=db,
+        response=response,
+        idempotency_key=idempotency_key,
     )
 
 
 @router.post("/sms", response_model=NotificationQueued)
 @limiter.limit("10/minute")
-def queue_sms(request: Request, payload: SMSNotificationCreate, db: Session = Depends(get_db)):
-    notification = Notification(
+def queue_sms(
+    request: Request,
+    response: Response,
+    payload: SMSNotificationCreate,
+    db: Session = Depends(get_db),
+    idempotency_key: str | None = Header(default=None, max_length=255),
+):
+    return _queue_notification(
         channel="sms",
         recipient=payload.recipient,
+        subject=None,
         body=payload.message,
         provider="twilio",
-        status="pending",
-    )
-    db.add(notification)
-    db.commit()
-    db.refresh(notification)
-
-    send_sms_task.delay(str(notification.id))
-
-    return NotificationQueued(
-        id=notification.id,
-        status=notification.status,
-        channel=notification.channel,
+        task_delay_fn=send_sms_task.delay,
+        db=db,
+        response=response,
+        idempotency_key=idempotency_key,
     )
 
 
@@ -108,11 +198,16 @@ def get_notification(request: Request, notification_id: UUID, db: Session = Depe
 @router.post("/{notification_id}/retry", response_model=NotificationQueued)
 @limiter.limit("10/minute")
 def retry_notification(request: Request, notification_id: UUID, db: Session = Depends(get_db)):
-    # Step 1: Find the notification
     notification = db.get(Notification, notification_id)
 
     if not notification:
         raise HTTPException(status_code=404, detail="Notification not found")
+
+    if notification.status != "failed":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot retry: notification is not in failed state (currently {notification.status})",
+        )
 
     MAX_MANUAL_EXTENSIONS = 3
     granted = (notification.max_attempts - 3) 
@@ -138,9 +233,7 @@ def retry_notification(request: Request, notification_id: UUID, db: Session = De
             error_message=None,
             provider_message_id=None,
             sent_at=None,
-
             updated_at=func.now(),
-
             max_attempts=Notification.max_attempts + 3,
         )
     )

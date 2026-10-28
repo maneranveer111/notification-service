@@ -15,13 +15,14 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 
 def start_celery():
+    queue = os.environ.get("CELERY_QUEUE", "notification_service_queue")
     subprocess.run(
         [
             "celery",
             "-A", "app.celery_app",
             "worker",
             "--loglevel=info",
-            "-Q", "notification_service_queue",
+            "-Q", queue,
             "--pool=solo",
         ]
     )

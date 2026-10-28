@@ -18,12 +18,10 @@ class Notification(Base):
 
     __table_args__ = (
         Index("ix_notifications_status_created", "status", "created_at"),
-   
         Index("ix_notifications_recipient", "recipient"),
-
         Index("ix_notifications_provider_message_id", "provider_message_id"),
-
         Index("ix_notifications_created_at", "created_at"),
+        Index("ux_notifications_idempotency_key", "idempotency_key", unique=True),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -44,9 +42,16 @@ class Notification(Base):
 
     provider: Mapped[str | None] = mapped_column(
         String(50), nullable=True
-    )  # "sendgrid" / "twilio"
+    )  # "sendgrid" / "twilio" / "brevo" / "smtp"
     provider_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    request_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    delivered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     sent_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
