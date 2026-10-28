@@ -43,4 +43,11 @@ celery.conf.update(
     task_acks_late=True,
 
     worker_prefetch_multiplier=1,
+
+    beat_schedule={
+        "requeue-stale-notifications-every-120-seconds": {
+            "task": "notifications.requeue_stale",
+            "schedule": 120.0,
+        },
+    },
 )

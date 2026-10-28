@@ -9,6 +9,7 @@ from slowapi.errors import RateLimitExceeded
 from app.config import get_settings
 from app.database import get_db
 from app.api.notifications import router as notifications_router
+from app.api.webhooks import router as webhooks_router
 from app.limiter import limiter, rate_limit_exceeded_handler
 
 settings = get_settings()
@@ -31,6 +32,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 app.include_router(notifications_router)
+app.include_router(webhooks_router)
 
 @app.get("/health")
 def health():

@@ -1,9 +1,10 @@
 import logging
 import random
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from celery import Task
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.celery_app import celery
@@ -14,6 +15,10 @@ from app.services.sms_service import send_sms
 from app.services.errors import PermanentError, TransientError
 
 logger = logging.getLogger(__name__)
+
+STALE_PENDING_MINUTES = 5
+STALE_PROCESSING_MINUTES = 15
+SWEEPER_BATCH_SIZE = 100
 
 
 class NotificationTask(Task):
@@ -149,3 +154,59 @@ def send_sms_task(self, notification_id: str) -> dict:
             message=n.body or "",
         )),
     )
+
+
+@celery.task(name="notifications.requeue_stale")
+def requeue_stale() -> dict:
+    """
+    Sweeper task running via Celery Beat.
+    Re-queues stale pending and processing notifications.
+    """
+    now = datetime.now(timezone.utc)
+    pending_cutoff = now - timedelta(minutes=STALE_PENDING_MINUTES)
+    processing_cutoff = now - timedelta(minutes=STALE_PROCESSING_MINUTES)
+
+    db: Session = SessionLocal()
+    stale_items = []
+    try:
+        stmt = (
+            select(Notification)
+            .where(
+                or_(
+                    and_(
+                        Notification.status == "pending",
+                        Notification.updated_at < pending_cutoff,
+                    ),
+                    and_(
+                        Notification.status == "processing",
+                        Notification.updated_at < processing_cutoff,
+                    ),
+                )
+            )
+            .order_by(Notification.updated_at.asc())
+            .limit(SWEEPER_BATCH_SIZE)
+            .with_for_update(skip_locked=True)
+        )
+        stale_notifications = db.execute(stmt).scalars().all()
+
+        for notification in stale_notifications:
+            notification.updated_at = datetime.now(timezone.utc)
+            stale_items.append((str(notification.id), notification.channel))
+
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.error(f"Error sweeping stale notifications: {exc}")
+        return {"status": "error", "error": str(exc)}
+    finally:
+        db.close()
+
+    for notif_id, channel in stale_items:
+        if channel == "email":
+            send_email_task.delay(notif_id)
+        elif channel == "sms":
+            send_sms_task.delay(notif_id)
+
+    count = len(stale_items)
+    logger.info(f"Sweeper requeued {count} stale notification(s)")
+    return {"status": "ok", "requeued_count": count}

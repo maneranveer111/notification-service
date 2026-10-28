@@ -21,6 +21,7 @@ class Notification(Base):
         Index("ix_notifications_recipient", "recipient"),
         Index("ix_notifications_provider_message_id", "provider_message_id"),
         Index("ix_notifications_created_at", "created_at"),
+        Index("ix_notifications_status_updated_at", "status", "updated_at"),
         Index("ux_notifications_idempotency_key", "idempotency_key", unique=True),
     )
 

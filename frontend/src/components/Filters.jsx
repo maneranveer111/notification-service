@@ -10,9 +10,13 @@ export default function Filters({ status, channel, onStatusChange, onChannelChan
         >
           <option value="">All</option>
           <option value="pending">Pending</option>
+          <option value="processing">Processing</option>
           <option value="sent">Sent</option>
-          <option value="failed">Failed</option>
+          <option value="delivered">Delivered</option>
           <option value="retrying">Retrying</option>
+          <option value="failed">Failed</option>
+          <option value="bounced">Bounced</option>
+          <option value="undelivered">Undelivered</option>
         </select>
       </div>
 

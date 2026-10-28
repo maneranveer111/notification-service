@@ -29,6 +29,7 @@ def send_sms(recipient: str, message: str) -> str | None:
             body=message,
             from_=settings.twilio_from_number,  # IMPORTANT: underscore is required
             to=recipient,
+            status_callback=f"{settings.public_base_url}/webhooks/twilio",
         )
 
         logger.info(f"Twilio message SID: {sms.sid}")

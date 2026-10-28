@@ -12,5 +12,8 @@ __pycache__/
 # Database file (if any)
 *.db
 
+# Celery Beat schedule files
+celerybeat-schedule*
+
 # VS Code settings
 .vscode/
