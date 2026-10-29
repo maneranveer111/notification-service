@@ -6,6 +6,8 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+from app.models.api_client import ApiClient  # noqa: F401 - ensure referenced table is registered
+from app.models.template import Template  # noqa: F401 - ensure referenced table is registered
 
 
 class Notification(Base):
@@ -22,6 +24,7 @@ class Notification(Base):
         Index("ix_notifications_provider_message_id", "provider_message_id"),
         Index("ix_notifications_created_at", "created_at"),
         Index("ix_notifications_status_updated_at", "status", "updated_at"),
+        Index("ix_notifications_status_scheduled_at", "status", "scheduled_at"),
         Index("ux_notifications_idempotency_key", "idempotency_key", unique=True),
     )
 
@@ -41,6 +44,12 @@ class Notification(Base):
         nullable=True,
     )
 
+    batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
+        index=True,
+    )
+
     channel: Mapped[str] = mapped_column(String(20), nullable=False)
 
     recipient: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -49,6 +58,7 @@ class Notification(Base):
     body: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    priority: Mapped[str] = mapped_column(String(10), nullable=False, default="normal", server_default="normal")
 
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
@@ -67,6 +77,10 @@ class Notification(Base):
     )
 
     sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    scheduled_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 

@@ -47,6 +47,9 @@ class Settings(BaseSettings):
 
     frontend_url: str = "http://localhost:5173"
 
+    schedule_max_days: int = 30
+    bulk_max_recipients: int = 200
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -17,6 +17,8 @@ export default function Filters({ status, channel, onStatusChange, onChannelChan
           <option value="failed">Failed</option>
           <option value="bounced">Bounced</option>
           <option value="undelivered">Undelivered</option>
+          <option value="scheduled">Scheduled</option>
+          <option value="cancelled">Cancelled</option>
         </select>
       </div>
 

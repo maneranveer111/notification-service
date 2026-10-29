@@ -18,7 +18,8 @@ from app.config import get_settings
 
 def start_celery():
     settings = get_settings()
-    queue = settings.celery_queue or "notification_service_queue"
+    q = settings.celery_queue or "notification_service_queue"
+    queue = f"{q}_high,{q},{q}_low"
 
     cmd = [
         "celery",

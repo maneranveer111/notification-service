@@ -1,5 +1,6 @@
 from celery import Celery
 
+import app.models  # noqa: F401 - ensures all model metadata is registered when Celery loads
 from app.config import get_settings
 
 settings = get_settings()
@@ -30,6 +31,7 @@ celery.conf.update(
         "socket_keepalive": True,
         "socket_timeout": 30,
         "socket_connect_timeout": 30,
+        "queue_order_strategy": "priority",
     },
     redis_backend_transport_options={
         "socket_keepalive": True,
@@ -48,6 +50,10 @@ celery.conf.update(
         "requeue-stale-notifications-every-120-seconds": {
             "task": "notifications.requeue_stale",
             "schedule": 120.0,
+        },
+        "dispatch-scheduled-notifications-every-30-seconds": {
+            "task": "notifications.dispatch_scheduled",
+            "schedule": 30.0,
         },
     },
 )

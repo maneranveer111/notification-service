@@ -7,6 +7,8 @@ const statusColors = {
   retrying: "bg-orange-100 text-orange-800",
   bounced: "bg-red-100 text-red-800",
   undelivered: "bg-red-100 text-red-800",
+  scheduled: "bg-purple-100 text-purple-800",
+  cancelled: "bg-gray-100 text-gray-800",
 };
 
 export default function NotificationList({ notifications, onRetry, retryingId }) {

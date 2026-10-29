@@ -8,17 +8,28 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.celery_app import celery
+from app.config import get_settings
 from app.database import SessionLocal
+import app.models  # noqa: F401 - ensures all models (Template, ApiClient, etc.) are registered on Base.metadata
 from app.models.notification import Notification
 from app.services.email_service import send_email
 from app.services.sms_service import send_sms
 from app.services.errors import PermanentError, TransientError
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 STALE_PENDING_MINUTES = 5
 STALE_PROCESSING_MINUTES = 15
 SWEEPER_BATCH_SIZE = 100
+
+
+def queue_for(priority: str | None) -> str:
+    if priority == "high":
+        return f"{settings.celery_queue}_high"
+    elif priority == "low":
+        return f"{settings.celery_queue}_low"
+    return settings.celery_queue
 
 
 class NotificationTask(Task):
@@ -43,6 +54,12 @@ class NotificationTask(Task):
                 notification.status = "failed"
                 notification.error_message = str(exc)
                 db.commit()
+        except Exception as db_exc:
+            db.rollback()
+            logger.error(
+                f"Failed to record failure status for notification {notification_id} in on_failure: {db_exc}",
+                exc_info=True,
+            )
         finally:
             db.close()
 
@@ -60,6 +77,12 @@ class NotificationTask(Task):
                 notification.status = "retrying"
                 notification.error_message = str(exc)
                 db.commit()
+        except Exception as db_exc:
+            db.rollback()
+            logger.error(
+                f"Failed to record retry status for notification {notification_id} in on_retry: {db_exc}",
+                exc_info=True,
+            )
         finally:
             db.close()
 
@@ -115,8 +138,14 @@ def _deliver(task: Task, notification_id: str, send_fn) -> dict:
             logger.warning(f"Error delivering notification {notification_id}: {exc}")
             retries = getattr(task.request, "retries", 0)
             countdown = min(600, 30 * (2 ** retries)) + random.randint(0, 10)
-            raise task.retry(exc=exc, countdown=countdown)
-
+            raise task.retry(
+                exc=exc,
+                countdown=countdown,
+                queue=queue_for(notification.priority),
+            )
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 
@@ -156,6 +185,30 @@ def send_sms_task(self, notification_id: str) -> dict:
     )
 
 
+class EnqueueItem:
+    def __init__(self, id, channel: str, priority: str = "normal"):
+        self.id = id
+        self.channel = channel
+        self.priority = priority
+
+
+TASK_BY_CHANNEL = {
+    "email": send_email_task,
+    "sms": send_sms_task,
+}
+
+
+def enqueue_notification(notification):
+    channel = getattr(notification, "channel", None)
+    task = TASK_BY_CHANNEL.get(channel)
+    if not task:
+        return None
+    priority = getattr(notification, "priority", "normal")
+    queue = queue_for(priority)
+    notif_id = getattr(notification, "id", None)
+    return task.apply_async(args=[str(notif_id)], queue=queue)
+
+
 @celery.task(name="notifications.requeue_stale")
 def requeue_stale() -> dict:
     """
@@ -191,7 +244,13 @@ def requeue_stale() -> dict:
 
         for notification in stale_notifications:
             notification.updated_at = datetime.now(timezone.utc)
-            stale_items.append((str(notification.id), notification.channel))
+            stale_items.append(
+                EnqueueItem(
+                    id=notification.id,
+                    channel=notification.channel,
+                    priority=notification.priority,
+                )
+            )
 
         db.commit()
     except Exception as exc:
@@ -201,12 +260,58 @@ def requeue_stale() -> dict:
     finally:
         db.close()
 
-    for notif_id, channel in stale_items:
-        if channel == "email":
-            send_email_task.delay(notif_id)
-        elif channel == "sms":
-            send_sms_task.delay(notif_id)
+    for item in stale_items:
+        enqueue_notification(item)
 
     count = len(stale_items)
     logger.info(f"Sweeper requeued {count} stale notification(s)")
     return {"status": "ok", "requeued_count": count}
+
+
+@celery.task(name="notifications.dispatch_scheduled")
+def dispatch_scheduled() -> dict:
+    """
+    Scheduled sends task running via Celery Beat every 30 seconds.
+    Moves due scheduled notifications to pending and enqueues them.
+    """
+    now = datetime.now(timezone.utc)
+    db: Session = SessionLocal()
+    dispatched = []
+    try:
+        stmt = (
+            select(Notification)
+            .where(
+                Notification.status == "scheduled",
+                Notification.scheduled_at <= now,
+            )
+            .order_by(Notification.scheduled_at.asc())
+            .limit(200)
+            .with_for_update(skip_locked=True)
+        )
+        notifications = db.execute(stmt).scalars().all()
+
+        for n in notifications:
+            n.status = "pending"
+            n.updated_at = datetime.now(timezone.utc)
+            dispatched.append(
+                EnqueueItem(
+                    id=n.id,
+                    channel=n.channel,
+                    priority=n.priority,
+                )
+            )
+
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.error(f"Error dispatching scheduled notifications: {exc}")
+        return {"status": "error", "error": str(exc)}
+    finally:
+        db.close()
+
+    for item in dispatched:
+        enqueue_notification(item)
+
+    count = len(dispatched)
+    logger.info(f"Dispatched {count} scheduled notification(s)")
+    return {"status": "ok", "dispatched_count": count}
