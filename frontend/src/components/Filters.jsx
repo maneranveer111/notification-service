@@ -19,6 +19,7 @@ export default function Filters({ status, channel, onStatusChange, onChannelChan
           <option value="undelivered">Undelivered</option>
           <option value="scheduled">Scheduled</option>
           <option value="cancelled">Cancelled</option>
+          <option value="suppressed">Suppressed</option>
         </select>
       </div>
 
@@ -32,6 +33,7 @@ export default function Filters({ status, channel, onStatusChange, onChannelChan
           <option value="">All</option>
           <option value="email">Email</option>
           <option value="sms">SMS</option>
+          <option value="webhook">Webhook</option>
         </select>
       </div>
 

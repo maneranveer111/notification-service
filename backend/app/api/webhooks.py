@@ -1,11 +1,13 @@
 import hmac
 import logging
+import re
 import uuid
 from datetime import datetime, timezone
 from urllib.parse import parse_qs
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 from twilio.request_validator import RequestValidator
 
@@ -13,6 +15,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.models.delivery_event import DeliveryEvent
 from app.models.notification import Notification
+from app.models.suppression import Suppression
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,50 @@ TWILIO_STATUS_MAP = {
     "undelivered": "undelivered",
     "failed": "undelivered",
 }
+
+# Brevo event types that trigger a hard-bounce suppression
+BREVO_HARD_BOUNCE_EVENTS = {"hard_bounce", "invalid_email", "blocked"}
+
+_EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
+
+
+def _is_valid_email(email: str | None) -> bool:
+    if not email or not isinstance(email, str):
+        return False
+    email = email.strip()
+    if len(email) < 3 or len(email) > 255 or "@" not in email:
+        return False
+    return bool(_EMAIL_REGEX.match(email))
+
+
+def _upsert_suppression(db: Session, channel: str, recipient: str, reason: str, source: str) -> None:
+    """
+    Idempotent upsert.
+    When a hard bounce arrives for an existing (channel, recipient) with reason='opt_out',
+    escalate atomically to reason='bounce' and source='bounce'.
+    """
+    recipient_lower = recipient.strip().lower()
+    stmt = (
+        pg_insert(Suppression)
+        .values(
+            channel=channel,
+            recipient=recipient_lower,
+            reason=reason,
+            source=source,
+        )
+    )
+    if reason == "bounce":
+        stmt = stmt.on_conflict_do_update(
+            constraint="uq_suppressions_channel_recipient",
+            set_=dict(
+                reason="bounce",
+                source="bounce",
+            ),
+            where=(Suppression.reason == "opt_out"),
+        )
+    else:
+        stmt = stmt.on_conflict_do_nothing(constraint="uq_suppressions_channel_recipient")
+    db.execute(stmt)
 
 
 def apply_delivery_event(
@@ -64,6 +111,25 @@ def apply_delivery_event(
                     notification.error_message = f"{notification.error_message} | {error_detail}"
                 else:
                     notification.error_message = error_detail
+
+    # Auto-suppress on hard bounce for Brevo
+    if provider == "brevo" and event_type.lower() in BREVO_HARD_BOUNCE_EVENTS:
+        bounce_recipient = None
+        if notification is not None and notification.recipient:
+            bounce_recipient = notification.recipient
+        elif raw and isinstance(raw, dict):
+            candidate = raw.get("email")
+            if _is_valid_email(candidate):
+                bounce_recipient = candidate.strip()
+
+        if bounce_recipient:
+            _upsert_suppression(
+                db=db,
+                channel="email",
+                recipient=bounce_recipient,
+                reason="bounce",
+                source="bounce",
+            )
 
     db.commit()
 

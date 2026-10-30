@@ -9,6 +9,7 @@ const statusColors = {
   undelivered: "bg-red-100 text-red-800",
   scheduled: "bg-purple-100 text-purple-800",
   cancelled: "bg-gray-100 text-gray-800",
+  suppressed: "bg-yellow-200 text-yellow-900",
 };
 
 export default function NotificationList({ notifications, onRetry, retryingId }) {
@@ -37,7 +38,7 @@ export default function NotificationList({ notifications, onRetry, retryingId })
         <tbody>
           {notifications.map((n) => (
             <tr key={n.id} className="border-t border-gray-100">
-              <td className="px-4 py-3 capitalize">{n.channel}</td>
+              <td className="px-4 py-3 capitalize">{n.channel}{n.channel === "webhook" && <span className="ml-1 px-1 py-0.5 rounded text-xs bg-indigo-100 text-indigo-700">webhook</span>}</td>
               <td className="px-4 py-3">{n.recipient}</td>
               <td className="px-4 py-3">
                 <span

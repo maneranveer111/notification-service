@@ -32,6 +32,7 @@ from app.models.notification import Notification  # important: ensures model is 
 from app.models.delivery_event import DeliveryEvent
 from app.models.api_client import ApiClient
 from app.models.template import Template
+from app.models.suppression import Suppression
 
 target_metadata = Base.metadata
 

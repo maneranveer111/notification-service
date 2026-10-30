@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 from app.models.api_client import ApiClient  # noqa: F401 - ensure referenced table is registered
 from app.models.template import Template  # noqa: F401 - ensure referenced table is registered
+from app.models.suppression import Suppression  # noqa: F401 - ensure suppression table is registered
 
 
 class Notification(Base):
@@ -49,6 +50,8 @@ class Notification(Base):
         nullable=True,
         index=True,
     )
+
+    category: Mapped[str] = mapped_column(String(20), nullable=False, default="transactional", server_default="transactional")
 
     channel: Mapped[str] = mapped_column(String(20), nullable=False)
 

@@ -12,6 +12,8 @@ from app.api.notifications import router as notifications_router
 from app.api.webhooks import router as webhooks_router
 from app.api.admin import router as admin_router
 from app.api.templates import router as templates_router
+from app.api.suppressions import router as suppressions_router
+from app.api.unsubscribe import router as unsubscribe_router
 from app.limiter import limiter, rate_limit_exceeded_handler
 from app.security import ClientRateLimitExceeded
 
@@ -51,6 +53,8 @@ app.include_router(notifications_router)
 app.include_router(webhooks_router)
 app.include_router(admin_router)
 app.include_router(templates_router)
+app.include_router(suppressions_router)
+app.include_router(unsubscribe_router)
 
 @app.get("/health")
 def health():

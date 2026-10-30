@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
+from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, Security
@@ -12,6 +13,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.limiter import limiter
 from app.models.notification import Notification
+from app.models.suppression import Suppression
 from app.models.template import Template
 from app.schemas.notification import (
     BatchStatusResponse,
@@ -21,8 +23,10 @@ from app.schemas.notification import (
     NotificationQueued,
     NotificationRead,
     SMSNotificationCreate,
+    WebhookNotificationCreate,
 )
 from app.security import Principal, get_principal
+from app.services.suppression_service import is_suppressed
 from app.services.templating import MissingVariables, render
 from app.tasks.notification_tasks import (
     enqueue_notification,
@@ -85,6 +89,7 @@ def _queue_notification(
     priority: str = "normal",
     scheduled_at: datetime | None = None,
     batch_id: UUID | None = None,
+    category: str = "transactional",
 ) -> NotificationQueued:
     request_hash = None
     scoped_idempotency_key = None
@@ -121,6 +126,63 @@ def _queue_notification(
                 channel=existing.channel,
             )
 
+    # Suppression check (skip for webhook channel)
+    if channel != "webhook":
+        suppression = is_suppressed(db, channel, recipient, category)
+        if suppression:
+            notification = Notification(
+                channel=channel,
+                recipient=recipient,
+                subject=subject,
+                body=body,
+                provider=provider,
+                status="suppressed",
+                priority=priority,
+                scheduled_at=scheduled_at,
+                batch_id=batch_id,
+                idempotency_key=scoped_idempotency_key,
+                request_hash=request_hash,
+                client_id=client_id,
+                template_id=template_id,
+                category=category,
+                error_message=f"Recipient suppressed ({suppression.reason})",
+            )
+            db.add(notification)
+            try:
+                db.commit()
+                db.refresh(notification)
+            except IntegrityError:
+                db.rollback()
+                if scoped_idempotency_key:
+                    existing = db.execute(
+                        select(Notification).where(Notification.idempotency_key == scoped_idempotency_key)
+                    ).scalar_one_or_none()
+                    if existing:
+                        if existing.request_hash != request_hash:
+                            raise HTTPException(
+                                status_code=422,
+                                detail="Idempotency-Key reused with a different request",
+                            )
+                        response.headers["Idempotent-Replay"] = "true"
+                        return NotificationQueued(
+                            id=existing.id,
+                            status=existing.status,
+                            channel=existing.channel,
+                        )
+                raise
+            return NotificationQueued(
+                id=notification.id,
+                status=notification.status,
+                channel=notification.channel,
+            )
+
+    # Marketing emails require unsubscribe_secret
+    if channel == "email" and category == "marketing" and not settings.unsubscribe_secret:
+        raise HTTPException(
+            status_code=422,
+            detail="unsubscribe_secret must be configured to send marketing emails",
+        )
+
     initial_status = "scheduled" if scheduled_at else "pending"
 
     notification = Notification(
@@ -137,6 +199,7 @@ def _queue_notification(
         request_hash=request_hash,
         client_id=client_id,
         template_id=template_id,
+        category=category,
     )
     db.add(notification)
 
@@ -237,6 +300,7 @@ def queue_email(
         template_id=template_id,
         priority=payload.priority,
         scheduled_at=payload.scheduled_at,
+        category=payload.category,
     )
 
 
@@ -302,6 +366,54 @@ def queue_sms(
         template_id=template_id,
         priority=payload.priority,
         scheduled_at=payload.scheduled_at,
+        category=payload.category,
+    )
+
+
+@router.post("/webhook", response_model=NotificationQueued)
+@limiter.limit("10/minute")
+def queue_webhook(
+    request: Request,
+    response: Response,
+    payload: WebhookNotificationCreate,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+    idempotency_key: str | None = Header(default=None, max_length=200),
+):
+    if not isinstance(principal, Principal):
+        principal = Principal(client_id=None, is_admin=True)
+
+    # Validate URL: must be https and hostname must be in allowlist
+    try:
+        parsed = urlparse(payload.recipient)
+    except Exception:
+        raise HTTPException(status_code=422, detail="Invalid webhook URL")
+
+    if parsed.scheme != "https":
+        raise HTTPException(status_code=422, detail="Webhook URL must use https")
+
+    allowed_hosts = {h.strip() for h in settings.webhook_channel_allowed_hosts.split(",") if h.strip()}
+    hostname = parsed.hostname or ""
+    if hostname not in allowed_hosts:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Webhook host '{hostname}' is not in the allowed hosts list",
+        )
+
+    provider = "slack" if hostname == "hooks.slack.com" else ("discord" if hostname in {"discord.com", "discordapp.com"} else "webhook")
+
+    return _queue_notification(
+        channel="webhook",
+        recipient=payload.recipient,
+        subject=None,
+        body=payload.body,
+        provider=provider,
+        db=db,
+        response=response,
+        idempotency_key=idempotency_key,
+        client_id=principal.client_id,
+        priority=payload.priority,
+        category="transactional",
     )
 
 
@@ -328,6 +440,13 @@ def bulk_notifications(
         )
 
     _validate_scheduled_at(payload.scheduled_at, settings.schedule_max_days)
+
+    # Marketing requires unsubscribe_secret for email
+    if payload.channel == "email" and payload.category == "marketing" and not settings.unsubscribe_secret:
+        raise HTTPException(
+            status_code=422,
+            detail="unsubscribe_secret must be configured to send marketing emails",
+        )
 
     # De-duplicate recipients case-insensitively
     seen = set()
@@ -373,6 +492,7 @@ def bulk_notifications(
     initial_status = "scheduled" if payload.scheduled_at else "pending"
     provider = "brevo" if payload.channel == "email" else "twilio"
     created_notifications = []
+    suppressed_count = 0
 
     for r in unique_recipients:
         if template:
@@ -391,6 +511,29 @@ def bulk_notifications(
             subj = payload.subject if payload.channel == "email" else None
             b_text = payload.body if payload.channel == "email" else payload.message
 
+        # Suppression check per recipient
+        suppression = is_suppressed(db, payload.channel, r.recipient, payload.category)
+        if suppression:
+            suppressed_count += 1
+            notif = Notification(
+                channel=payload.channel,
+                recipient=r.recipient,
+                subject=subj,
+                body=b_text,
+                provider=provider,
+                status="suppressed",
+                priority=payload.priority,
+                scheduled_at=payload.scheduled_at,
+                batch_id=batch_id,
+                client_id=principal.client_id,
+                template_id=payload.template_id,
+                category=payload.category,
+                error_message=f"Recipient suppressed ({suppression.reason})",
+            )
+            db.add(notif)
+            created_notifications.append(notif)
+            continue
+
         notif = Notification(
             channel=payload.channel,
             recipient=r.recipient,
@@ -403,6 +546,7 @@ def bulk_notifications(
             batch_id=batch_id,
             client_id=principal.client_id,
             template_id=payload.template_id,
+            category=payload.category,
         )
         db.add(notif)
         created_notifications.append(notif)
@@ -413,11 +557,14 @@ def bulk_notifications(
 
     if not payload.scheduled_at:
         for n in created_notifications:
-            enqueue_notification(n)
+            if n.status != "suppressed":
+                enqueue_notification(n)
 
+    queued = len(created_notifications) - suppressed_count
     return BulkNotificationResponse(
         batch_id=batch_id,
-        queued=len(created_notifications),
+        queued=queued,
+        suppressed=suppressed_count,
         ids=[n.id for n in created_notifications],
     )
 
@@ -495,7 +642,7 @@ def list_notifications(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
     status: str | None = Query(default=None, description="Filter by status (pending/sent/failed/...)"),
-    channel: str | None = Query(default=None, description="Filter by channel (email/sms)"),
+    channel: str | None = Query(default=None, description="Filter by channel (email/sms/webhook)"),
     limit: int = Query(default=50, ge=1, le=200, description="Number of records to return"),
     offset: int = Query(default=0, ge=0, description="Number of records to skip"),
 ):
@@ -565,7 +712,7 @@ def retry_notification(
         )
 
     MAX_MANUAL_EXTENSIONS = 3
-    granted = (notification.max_attempts - 3) 
+    granted = (notification.max_attempts - 3)
     if granted >= MAX_MANUAL_EXTENSIONS:
         raise HTTPException(
             status_code=422,
