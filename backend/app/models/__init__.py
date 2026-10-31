@@ -3,6 +3,8 @@ from app.models.delivery_event import DeliveryEvent
 from app.models.notification import Notification
 from app.models.template import Template
 from app.models.suppression import Suppression
+from app.models.user import User
+from app.models.delivery_attempt import DeliveryAttempt
 
 __all__ = [
     "ApiClient",
@@ -10,5 +12,6 @@ __all__ = [
     "Notification",
     "Template",
     "Suppression",
+    "User",
+    "DeliveryAttempt",
 ]
-

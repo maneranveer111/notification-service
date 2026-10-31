@@ -1,14 +1,14 @@
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, Security, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.template import Template
-from app.security import Principal, get_principal
+from app.security import Principal, get_principal, require_write
 from app.services.templating import extract_variables
 
 router = APIRouter(
@@ -62,13 +62,13 @@ def _to_read(t: Template) -> TemplateRead:
     )
 
 
-@router.post("", response_model=TemplateRead, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=TemplateRead, status_code=status.HTTP_201_CREATED, dependencies=[Security(require_write)])
 def create_template(
     payload: TemplateCreate,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_principal),
+    principal: Principal = Depends(require_write),
 ):
-    client_id = None if principal.is_admin else principal.client_id
+    client_id = None if principal.sees_all else principal.client_id
     template = Template(
         client_id=client_id,
         name=payload.name,
@@ -84,17 +84,23 @@ def create_template(
 
 @router.get("", response_model=list[TemplateRead])
 def list_templates(
+    response: Response,
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ):
     stmt = select(Template).order_by(Template.created_at.desc())
-    if not principal.is_admin:
-        stmt = stmt.where(
-            or_(
-                Template.client_id == principal.client_id,
-                Template.client_id.is_(None),
-            )
+    count_stmt = select(func.count(Template.id))
+    if not principal.sees_all:
+        clause = or_(
+            Template.client_id == principal.client_id,
+            Template.client_id.is_(None),
         )
+        stmt = stmt.where(clause)
+        count_stmt = count_stmt.where(clause)
+
+    total = db.scalar(count_stmt) or 0
+    response.headers["X-Total-Count"] = str(total)
+
     templates = db.execute(stmt).scalars().all()
     return [_to_read(t) for t in templates]
 
@@ -109,24 +115,24 @@ def get_template(
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
-    if not principal.is_admin and template.client_id is not None and template.client_id != principal.client_id:
+    if not principal.sees_all and template.client_id is not None and template.client_id != principal.client_id:
         raise HTTPException(status_code=404, detail="Template not found")
 
     return _to_read(template)
 
 
-@router.put("/{id}", response_model=TemplateRead)
+@router.put("/{id}", response_model=TemplateRead, dependencies=[Security(require_write)])
 def update_template(
     id: UUID,
     payload: TemplateUpdate,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_principal),
+    principal: Principal = Depends(require_write),
 ):
     template = db.get(Template, id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
-    if not principal.is_admin:
+    if not principal.sees_all:
         if template.client_id != principal.client_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -148,17 +154,17 @@ def update_template(
     return _to_read(template)
 
 
-@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Security(require_write)])
 def delete_template(
     id: UUID,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_principal),
+    principal: Principal = Depends(require_write),
 ):
     template = db.get(Template, id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
-    if not principal.is_admin:
+    if not principal.sees_all:
         if template.client_id != principal.client_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

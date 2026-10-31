@@ -33,6 +33,8 @@ from app.models.delivery_event import DeliveryEvent
 from app.models.api_client import ApiClient
 from app.models.template import Template
 from app.models.suppression import Suppression
+from app.models.user import User
+from app.models.delivery_attempt import DeliveryAttempt
 
 target_metadata = Base.metadata
 

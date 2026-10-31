@@ -12,7 +12,10 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.api_client import ApiClient
 from app.models.notification import Notification
-from app.security import require_admin
+from app.models.user import User
+from app.schemas.user import UserCreate, UserRead, UserUpdate
+from app.security import Principal, require_admin
+from app.services.passwords import hash_password
 
 router = APIRouter(
     prefix="/admin",
@@ -180,4 +183,86 @@ def get_client_usage(id: UUID, db: Session = Depends(get_db)):
         by_status=by_status,
         last_24_hours=last_24h,
     )
+
+
+@router.post("/users", response_model=UserRead, status_code=status.HTTP_201_CREATED)
+def create_user(payload: UserCreate, db: Session = Depends(get_db)):
+    email = payload.email.strip().lower()
+    existing = db.scalar(select(User).where(User.email == email))
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email already registered",
+        )
+
+    user = User(
+        email=email,
+        password_hash=hash_password(payload.password),
+        role=payload.role,
+        is_active=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.get("/users", response_model=list[UserRead])
+def list_users(db: Session = Depends(get_db)):
+    users = db.scalars(select(User).order_by(User.created_at.desc())).all()
+    return list(users)
+
+
+@router.patch("/users/{id}", response_model=UserRead)
+def update_user(
+    id: UUID,
+    payload: UserUpdate,
+    principal: Principal = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    user = db.get(User, id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    is_self = principal.user_id is not None and principal.user_id == user.id
+
+    if is_self:
+        if payload.is_active is False:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot deactivate your own account",
+            )
+        if payload.role is not None and payload.role != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot demote your own admin account",
+            )
+
+    will_demote_or_deactivate = (
+        (payload.is_active is False or (payload.role is not None and payload.role != "admin"))
+        and user.role == "admin"
+        and user.is_active
+    )
+
+    if will_demote_or_deactivate:
+        active_admins = db.scalar(
+            select(func.count(User.id)).where(User.role == "admin", User.is_active == True)
+        ) or 0
+        if active_admins <= 1:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot deactivate or demote the last active admin",
+            )
+
+    if payload.role is not None:
+        user.role = payload.role
+    if payload.is_active is not None:
+        user.is_active = payload.is_active
+    if payload.password is not None:
+        user.password_hash = hash_password(payload.password)
+
+    db.commit()
+    db.refresh(user)
+    return user
+
 

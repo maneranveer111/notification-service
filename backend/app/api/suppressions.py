@@ -6,15 +6,15 @@ DELETE /suppressions/{id} – admin only
 """
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Security
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, Security
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.suppression import Suppression
 from app.schemas.notification import SuppressionCreate, SuppressionRead
-from app.security import Principal, get_principal
+from app.security import Principal, get_principal, require_admin, require_write
 
 router = APIRouter(
     prefix="/suppressions",
@@ -23,14 +23,14 @@ router = APIRouter(
 )
 
 
-@router.post("", response_model=SuppressionRead, status_code=200)
+@router.post("", response_model=SuppressionRead, status_code=200, dependencies=[Security(require_write)])
 def create_suppression(
     payload: SuppressionCreate,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_principal),
+    principal: Principal = Depends(require_write),
 ):
     if not isinstance(principal, Principal):
-        principal = Principal(client_id=None, is_admin=True)
+        principal = Principal(client_id=None, is_admin=True, can_write=True, sees_all=True)
 
     recipient_lower = payload.recipient.strip().lower()
     stmt = (
@@ -73,17 +73,16 @@ def create_suppression(
     return existing
 
 
-@router.get("", response_model=list[SuppressionRead])
+@router.get("", response_model=list[SuppressionRead], dependencies=[Security(require_admin)])
 def list_suppressions(
+    response: Response,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_principal),
+    principal: Principal = Depends(require_admin),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ):
-    if not isinstance(principal, Principal):
-        principal = Principal(client_id=None, is_admin=True)
-    if not principal.is_admin:
-        raise HTTPException(status_code=403, detail="Admin only")
+    total = db.scalar(select(func.count(Suppression.id))) or 0
+    response.headers["X-Total-Count"] = str(total)
 
     rows = db.execute(
         select(Suppression).order_by(Suppression.created_at.desc()).offset(offset).limit(limit)
@@ -91,17 +90,12 @@ def list_suppressions(
     return rows
 
 
-@router.delete("/{suppression_id}", status_code=204)
+@router.delete("/{suppression_id}", status_code=204, dependencies=[Security(require_admin)])
 def delete_suppression(
     suppression_id: UUID,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_principal),
+    principal: Principal = Depends(require_admin),
 ):
-    if not isinstance(principal, Principal):
-        principal = Principal(client_id=None, is_admin=True)
-    if not principal.is_admin:
-        raise HTTPException(status_code=403, detail="Admin only")
-
     row = db.get(Suppression, suppression_id)
     if not row:
         raise HTTPException(status_code=404, detail="Suppression not found")

@@ -1,5 +1,8 @@
 import logging
 import smtplib
+import time
+from collections.abc import Callable
+from datetime import datetime, timezone
 from email.message import EmailMessage
 from email.utils import make_msgid
 
@@ -102,7 +105,12 @@ def _is_provider_configured(provider: str) -> bool:
     return False
 
 
-def send_email(recipient: str, subject: str, body: str) -> tuple[str, str | None]:
+def send_email(
+    recipient: str,
+    subject: str,
+    body: str,
+    on_attempt: Callable[[str, str, str | None, int, datetime], None] | None = None,
+) -> tuple[str, str | None]:
     """
     Send an email iterating configured providers in settings.email_provider_order.
     Fails over across transient errors or failover-enabled permanent errors.
@@ -120,17 +128,29 @@ def send_email(recipient: str, subject: str, body: str) -> tuple[str, str | None
 
     last_error: Exception | None = None
     for provider in configured_providers:
+        start_mono = time.perf_counter()
+        started_at = datetime.now(timezone.utc)
         try:
             if provider == "brevo":
                 msg_id = _send_brevo(recipient, subject, body)
+                duration_ms = max(1, int((time.perf_counter() - start_mono) * 1000))
+                if on_attempt:
+                    on_attempt(provider, "success", None, duration_ms, started_at)
                 return ("brevo", msg_id)
             elif provider == "smtp":
                 msg_id = _send_smtp(recipient, subject, body)
+                duration_ms = max(1, int((time.perf_counter() - start_mono) * 1000))
+                if on_attempt:
+                    on_attempt(provider, "success", None, duration_ms, started_at)
                 return ("smtp", msg_id)
             else:
                 logger.warning(f"Unknown email provider: {provider}")
                 continue
         except (TransientError, PermanentError) as exc:
+            duration_ms = max(1, int((time.perf_counter() - start_mono) * 1000))
+            outcome = "transient_error" if isinstance(exc, TransientError) else "permanent_error"
+            if on_attempt:
+                on_attempt(provider, outcome, str(exc), duration_ms, started_at)
             if isinstance(exc, TransientError) or (isinstance(exc, PermanentError) and exc.failover):
                 logger.warning(f"Provider '{provider}' failed with {exc}. Failing over to next provider.")
                 last_error = exc
@@ -138,6 +158,9 @@ def send_email(recipient: str, subject: str, body: str) -> tuple[str, str | None
             else:
                 raise exc
         except Exception as exc:
+            duration_ms = max(1, int((time.perf_counter() - start_mono) * 1000))
+            if on_attempt:
+                on_attempt(provider, "transient_error", str(exc), duration_ms, started_at)
             logger.warning(f"Provider '{provider}' failed unexpectedly with {exc}.")
             last_error = TransientError(str(exc))
             continue

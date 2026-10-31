@@ -45,12 +45,21 @@ class Settings(BaseSettings):
 
     api_key: str
 
+    jwt_secret: str | None = None
+    jwt_expire_minutes: int = 480
+    metrics_token: str | None = None
+    log_format: str = "text"  # "text" or "json"
+
     frontend_url: str = "http://localhost:5173"
 
     schedule_max_days: int = 30
     bulk_max_recipients: int = 200
     unsubscribe_secret: str | None = None
     webhook_channel_allowed_hosts: str = "hooks.slack.com,discord.com,discordapp.com"
+
+    @property
+    def frontend_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.frontend_url.split(",") if origin.strip()]
 
 
 @lru_cache

@@ -1,17 +1,19 @@
 import logging
 import random
+import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 from uuid import UUID
 
 from celery import Task
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.celery_app import celery
 from app.config import get_settings
 from app.database import SessionLocal
 import app.models  # noqa: F401 - ensures all models (Template, ApiClient, etc.) are registered on Base.metadata
+from app.models.delivery_attempt import DeliveryAttempt
 from app.models.notification import Notification
 from app.services.email_service import send_email
 from app.services.sms_service import send_sms
@@ -112,18 +114,50 @@ class NotificationTask(Task):
         logger.info(f"Task {task_id} succeeded for notification {notification_id}")
 
 
+def _record_delivery_attempt(
+    notification_id: UUID,
+    attempt_number: int,
+    provider: str,
+    started_at: datetime,
+    duration_ms: int,
+    outcome: str,
+    error_message: str | None = None,
+) -> None:
+    attempt_db: Session = SessionLocal()
+    try:
+        attempt = DeliveryAttempt(
+            notification_id=notification_id,
+            attempt_number=attempt_number,
+            provider=provider,
+            started_at=started_at,
+            duration_ms=duration_ms,
+            outcome=outcome,
+            error_message=(error_message[:500] if error_message else None),
+        )
+        attempt_db.add(attempt)
+        attempt_db.commit()
+    except Exception as exc:
+        attempt_db.rollback()
+        logger.error(
+            f"Failed to record DeliveryAttempt for {notification_id}: {exc}",
+            extra={"notification_id": str(notification_id)},
+        )
+    finally:
+        attempt_db.close()
+
+
 def _deliver(task: Task, notification_id: str, send_fn) -> dict:
-    logger.info(f"Processing notification: {notification_id}")
+    logger.info(f"Processing notification: {notification_id}", extra={"notification_id": notification_id})
     db: Session = SessionLocal()
     try:
         notification = db.get(Notification, UUID(notification_id))
         if not notification:
-            logger.error(f"Notification {notification_id} not found in DB")
+            logger.error(f"Notification {notification_id} not found in DB", extra={"notification_id": notification_id})
             return {"status": "error", "reason": "not found"}
 
         # Guard against acks_late redelivery double-sends
         if notification.status in ("sent", "delivered", "suppressed"):
-            logger.info(f"Notification {notification_id} already {notification.status}, skipping")
+            logger.info(f"Notification {notification_id} already {notification.status}, skipping", extra={"notification_id": notification_id})
             return {"status": "skipped"}
 
         # Before delivering any scheduled notification, re-check whether recipient is suppressed
@@ -136,7 +170,8 @@ def _deliver(task: Task, notification_id: str, send_fn) -> dict:
                 notification.error_message = f"Recipient suppressed ({suppression.reason})"
                 db.commit()
                 logger.info(
-                    f"Scheduled notification {notification_id} suppressed ({suppression.reason}) before delivery"
+                    f"Scheduled notification {notification_id} suppressed ({suppression.reason}) before delivery",
+                    extra={"notification_id": notification_id},
                 )
                 return {"status": "suppressed", "notification_id": notification_id}
 
@@ -144,6 +179,26 @@ def _deliver(task: Task, notification_id: str, send_fn) -> dict:
         notification.status = "processing"
         notification.attempt_count += 1
         db.commit()
+
+        # Count existing delivery attempts to preserve order across failovers & retries
+        attempt_offset = db.scalar(
+            select(func.count(DeliveryAttempt.id)).where(DeliveryAttempt.notification_id == notification.id)
+        ) or 0
+        email_attempts_in_this_run = [0]
+
+        def on_email_attempt(provider, outcome, error_msg, duration_ms, started_at):
+            email_attempts_in_this_run[0] += 1
+            att_num = attempt_offset + email_attempts_in_this_run[0]
+            safe_err = _sanitize_error_message(error_msg, notification)
+            _record_delivery_attempt(
+                notification_id=notification.id,
+                attempt_number=att_num,
+                provider=provider,
+                started_at=started_at,
+                duration_ms=duration_ms,
+                outcome=outcome,
+                error_message=safe_err,
+            )
 
         # Build the actual send function, injecting unsubscribe footer for marketing emails
         effective_send_fn = send_fn
@@ -155,25 +210,54 @@ def _deliver(task: Task, notification_id: str, send_fn) -> dict:
                 _footer = f"\n\n---\nTo unsubscribe: {settings.public_base_url}/unsubscribe?token={_token}"
                 original_body = notification.body or ""
 
-                def _send_with_footer(n, _body=original_body + _footer):
-                    return send_fn_with_body(n, _body)
+                def _send_with_footer(n, on_attempt=None, _body=original_body + _footer):
+                    return send_fn_with_body(n, _body, on_attempt=on_attempt)
 
-                def send_fn_with_body(n, body):
-                    return send_email(
-                        recipient=n.recipient,
-                        subject=n.subject or "",
-                        body=body,
-                    )
+                def send_fn_with_body(n, body, on_attempt=None):
+                    try:
+                        return send_email(
+                            recipient=n.recipient,
+                            subject=n.subject or "",
+                            body=body,
+                            on_attempt=on_attempt,
+                        )
+                    except TypeError:
+                        return send_email(
+                            recipient=n.recipient,
+                            subject=n.subject or "",
+                            body=body,
+                        )
 
                 effective_send_fn = _send_with_footer
 
+        start_mono = time.perf_counter()
+        started_at = datetime.now(timezone.utc)
         try:
-            res = effective_send_fn(notification)
+            if notification.channel == "email":
+                try:
+                    res = effective_send_fn(notification, on_attempt=on_email_attempt)
+                except TypeError:
+                    res = effective_send_fn(notification)
+            else:
+                res = effective_send_fn(notification)
+
             if isinstance(res, tuple):
                 provider_name, message_id = res
             else:
                 provider_name = notification.provider or ("twilio" if notification.channel == "sms" else "brevo")
                 message_id = res
+
+            if notification.channel != "email" or email_attempts_in_this_run[0] == 0:
+                duration_ms = max(1, int((time.perf_counter() - start_mono) * 1000))
+                _record_delivery_attempt(
+                    notification_id=notification.id,
+                    attempt_number=attempt_offset + 1,
+                    provider=provider_name,
+                    started_at=started_at,
+                    duration_ms=duration_ms,
+                    outcome="success",
+                    error_message=None,
+                )
 
             notification.status = "sent"
             notification.sent_at = datetime.now(timezone.utc)
@@ -181,21 +265,56 @@ def _deliver(task: Task, notification_id: str, send_fn) -> dict:
             notification.provider = provider_name
             db.commit()
 
-            logger.info(f"Notification {notification_id} sent successfully via {provider_name}")
+            logger.info(
+                f"Notification {notification_id} sent successfully via {provider_name}",
+                extra={"notification_id": notification_id},
+            )
             return {"status": "sent", "notification_id": notification_id}
 
         except PermanentError as exc:
             safe_msg = _sanitize_error_message(str(exc), notification)
+            if notification.channel != "email" or email_attempts_in_this_run[0] == 0:
+                duration_ms = max(1, int((time.perf_counter() - start_mono) * 1000))
+                p_name = notification.provider or ("brevo" if notification.channel == "email" else ("twilio" if notification.channel == "sms" else "webhook"))
+                _record_delivery_attempt(
+                    notification_id=notification.id,
+                    attempt_number=attempt_offset + 1,
+                    provider=p_name,
+                    started_at=started_at,
+                    duration_ms=duration_ms,
+                    outcome="permanent_error",
+                    error_message=safe_msg,
+                )
             notification.status = "failed"
             notification.error_message = safe_msg
             db.commit()
-            logger.error(f"Permanent error delivering notification {notification_id}: {safe_msg}")
+            logger.error(
+                f"Permanent error delivering notification {notification_id}: {safe_msg}",
+                extra={"notification_id": notification_id},
+            )
             return {"status": "failed", "notification_id": notification_id, "reason": safe_msg}
         except Exception as exc:
             db.rollback()
             safe_msg = _sanitize_error_message(str(exc), notification)
-            logger.warning(f"Error delivering notification {notification_id}: {safe_msg}")
+            if notification.channel != "email" or email_attempts_in_this_run[0] == 0:
+                duration_ms = max(1, int((time.perf_counter() - start_mono) * 1000))
+                p_name = notification.provider or ("brevo" if notification.channel == "email" else ("twilio" if notification.channel == "sms" else "webhook"))
+                _record_delivery_attempt(
+                    notification_id=notification.id,
+                    attempt_number=attempt_offset + 1,
+                    provider=p_name,
+                    started_at=started_at,
+                    duration_ms=duration_ms,
+                    outcome="transient_error",
+                    error_message=safe_msg,
+                )
+            logger.warning(
+                f"Error delivering notification {notification_id}: {safe_msg}",
+                extra={"notification_id": notification_id},
+            )
             retries = getattr(task.request, "retries", 0)
+            if not isinstance(retries, int):
+                retries = 0
             countdown = min(600, 30 * (2 ** retries)) + random.randint(0, 10)
             raise task.retry(
                 exc=exc,
@@ -219,10 +338,11 @@ def send_email_task(self, notification_id: str) -> dict:
     return _deliver(
         self,
         notification_id,
-        lambda n: send_email(
+        lambda n, on_attempt=None: send_email(
             recipient=n.recipient,
             subject=n.subject or "",
             body=n.body or "",
+            on_attempt=on_attempt,
         ),
     )
 
