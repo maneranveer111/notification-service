@@ -54,6 +54,7 @@ class Settings(BaseSettings):
 
     schedule_max_days: int = 30
     bulk_max_recipients: int = 200
+    max_workspaces_per_user: int = 5
     unsubscribe_secret: str | None = None
     webhook_channel_allowed_hosts: str = "hooks.slack.com,discord.com,discordapp.com"
 

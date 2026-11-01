@@ -42,13 +42,24 @@ def reset_limiter_and_tasks():
 
 
 def _create_test_user(db, email: str, password: str = "securepassword123", role: str = "viewer", is_active: bool = True):
+    from app.models.workspace import Membership
+    from app.services.tenancy import get_default_workspace_id
     user = User(
         email=email.lower(),
         password_hash=hash_password(password),
         role=role,
+        is_superadmin=(role == "admin"),
         is_active=is_active,
     )
     db.add(user)
+    db.flush()
+    try:
+        def_ws_id = get_default_workspace_id(db)
+        ws_role = "owner" if role == "admin" else "viewer"
+        mem = Membership(user_id=user.id, workspace_id=def_ws_id, role=ws_role)
+        db.add(mem)
+    except Exception:
+        pass
     db.commit()
     db.refresh(user)
     return user
@@ -446,6 +457,8 @@ def test_viewer_jwt_cannot_call_any_non_get_route():
                 continue
             if any(route.path.startswith(prefix) for prefix in public_prefixes):
                 continue
+            if route.path in ("/workspaces", "/workspaces/current/leave", "/auth/switch-workspace"):
+                continue
             path = re.sub(r"\{[^}]+\}", dummy_uuid, route.path)
             resp = client.request(method, path, headers=v_headers, json={})
             assert resp.status_code == 403, f"Expected 403 for {method} {path}, got {resp.status_code}: {resp.text}"
@@ -493,12 +506,19 @@ def test_login_contract_and_security():
 def test_stats_overview_contract_and_avg_attempts():
     db = next(get_db())
 
-    # Create a distinct ApiClient for isolated stats calculation
+    # Create a distinct Workspace and ApiClient for isolated stats calculation
     from app.models.api_client import ApiClient
+    from app.models.workspace import Workspace
     import hashlib
+    iso_ws = Workspace(name=f"StatsWS_{uuid.uuid4().hex[:6]}", slug=f"statsws-{uuid.uuid4().hex[:6]}")
+    db.add(iso_ws)
+    db.commit()
+    db.refresh(iso_ws)
+
     raw_key = "nk_live_" + uuid.uuid4().hex
     key_hash = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
     client_rec = ApiClient(
+        workspace_id=iso_ws.id,
         name=f"StatsClient_{uuid.uuid4().hex[:8]}",
         key_hash=key_hash,
         key_prefix=raw_key[:12],
@@ -538,6 +558,7 @@ def test_stats_overview_contract_and_avg_attempts():
 
     # 2. Add notifications with specific attempt_count values: 2 and 4 (avg = 3.0)
     n1 = Notification(
+        workspace_id=iso_ws.id,
         channel="email",
         recipient="test1@example.com",
         status="sent",
@@ -545,6 +566,7 @@ def test_stats_overview_contract_and_avg_attempts():
         client_id=client_rec.id,
     )
     n2 = Notification(
+        workspace_id=iso_ws.id,
         channel="email",
         recipient="test2@example.com",
         status="failed",
@@ -572,12 +594,19 @@ def test_stats_overview_contract_and_avg_attempts():
 def test_stats_timeseries_contract_and_reconciliation():
     db = next(get_db())
 
-    # Create distinct ApiClient for isolated timeseries calculation
+    # Create distinct Workspace and ApiClient for isolated timeseries calculation
     from app.models.api_client import ApiClient
+    from app.models.workspace import Workspace
     import hashlib
+    iso_ws = Workspace(name=f"TSWS_{uuid.uuid4().hex[:6]}", slug=f"tsws-{uuid.uuid4().hex[:6]}")
+    db.add(iso_ws)
+    db.commit()
+    db.refresh(iso_ws)
+
     raw_key = "nk_live_" + uuid.uuid4().hex
     key_hash = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
     client_rec = ApiClient(
+        workspace_id=iso_ws.id,
         name=f"TSClient_{uuid.uuid4().hex[:8]}",
         key_hash=key_hash,
         key_prefix=raw_key[:12],
@@ -603,10 +632,10 @@ def test_stats_timeseries_contract_and_reconciliation():
 
     # 2. Add notifications: 2 ok (sent, delivered), 1 failed, 1 other (pending)
     now = datetime.now(timezone.utc)
-    n_sent = Notification(channel="email", recipient="r1@example.com", status="sent", client_id=client_rec.id, created_at=now)
-    n_deliv = Notification(channel="email", recipient="r2@example.com", status="delivered", client_id=client_rec.id, created_at=now)
-    n_fail = Notification(channel="email", recipient="r3@example.com", status="failed", client_id=client_rec.id, created_at=now)
-    n_pend = Notification(channel="email", recipient="r4@example.com", status="pending", client_id=client_rec.id, created_at=now)
+    n_sent = Notification(workspace_id=iso_ws.id, channel="email", recipient="r1@example.com", status="sent", client_id=client_rec.id, created_at=now)
+    n_deliv = Notification(workspace_id=iso_ws.id, channel="email", recipient="r2@example.com", status="delivered", client_id=client_rec.id, created_at=now)
+    n_fail = Notification(workspace_id=iso_ws.id, channel="email", recipient="r3@example.com", status="failed", client_id=client_rec.id, created_at=now)
+    n_pend = Notification(workspace_id=iso_ws.id, channel="email", recipient="r4@example.com", status="pending", client_id=client_rec.id, created_at=now)
     db.add_all([n_sent, n_deliv, n_fail, n_pend])
     db.commit()
 

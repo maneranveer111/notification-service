@@ -1,8 +1,8 @@
 """
 Suppression list CRUD endpoints.
-POST /suppressions      – any authenticated principal (idempotent)
-GET  /suppressions      – admin only
-DELETE /suppressions/{id} – admin only
+POST /suppressions      – any authenticated principal with write access (idempotent)
+GET  /suppressions      – admin only (scoped to workspace)
+DELETE /suppressions/{id} – admin only (scoped to workspace)
 """
 from uuid import UUID
 
@@ -15,6 +15,7 @@ from app.database import get_db
 from app.models.suppression import Suppression
 from app.schemas.notification import SuppressionCreate, SuppressionRead
 from app.security import Principal, get_principal, require_admin, require_write
+from app.services.tenancy import scoped
 
 router = APIRouter(
     prefix="/suppressions",
@@ -29,13 +30,11 @@ def create_suppression(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_write),
 ):
-    if not isinstance(principal, Principal):
-        principal = Principal(client_id=None, is_admin=True, can_write=True, sees_all=True)
-
     recipient_lower = payload.recipient.strip().lower()
     stmt = (
         pg_insert(Suppression)
         .values(
+            workspace_id=principal.workspace_id,
             channel=payload.channel,
             recipient=recipient_lower,
             reason=payload.reason,
@@ -44,7 +43,7 @@ def create_suppression(
     )
     if payload.reason == "bounce":
         stmt = stmt.on_conflict_do_update(
-            constraint="uq_suppressions_channel_recipient",
+            constraint="uq_suppressions_workspace_channel_recipient",
             set_=dict(
                 reason="bounce",
                 source="api",
@@ -53,7 +52,7 @@ def create_suppression(
         ).returning(Suppression)
     else:
         stmt = stmt.on_conflict_do_nothing(
-            constraint="uq_suppressions_channel_recipient"
+            constraint="uq_suppressions_workspace_channel_recipient"
         ).returning(Suppression)
 
     result = db.execute(stmt)
@@ -66,6 +65,7 @@ def create_suppression(
     # Already existed – fetch and return
     existing = db.execute(
         select(Suppression).where(
+            Suppression.workspace_id == principal.workspace_id,
             Suppression.channel == payload.channel,
             Suppression.recipient == recipient_lower,
         )
@@ -81,12 +81,12 @@ def list_suppressions(
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ):
-    total = db.scalar(select(func.count(Suppression.id))) or 0
+    count_stmt = scoped(select(func.count(Suppression.id)), Suppression, principal)
+    total = db.scalar(count_stmt) or 0
     response.headers["X-Total-Count"] = str(total)
 
-    rows = db.execute(
-        select(Suppression).order_by(Suppression.created_at.desc()).offset(offset).limit(limit)
-    ).scalars().all()
+    stmt = scoped(select(Suppression), Suppression, principal).order_by(Suppression.created_at.desc()).offset(offset).limit(limit)
+    rows = db.execute(stmt).scalars().all()
     return rows
 
 
@@ -96,9 +96,13 @@ def delete_suppression(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_admin),
 ):
-    row = db.get(Suppression, suppression_id)
+    row = db.execute(
+        select(Suppression).where(
+            Suppression.id == suppression_id,
+            Suppression.workspace_id == principal.workspace_id,
+        )
+    ).scalar_one_or_none()
     if not row:
         raise HTTPException(status_code=404, detail="Suppression not found")
     db.delete(row)
     db.commit()
-

@@ -10,7 +10,9 @@ sys.path.insert(0, str(backend_dir))
 from sqlalchemy import select
 from app.database import SessionLocal
 from app.models.user import User
+from app.models.workspace import Membership
 from app.services.passwords import hash_password
+from app.services.tenancy import get_default_workspace_id
 
 
 def main():
@@ -22,6 +24,12 @@ def main():
         choices=["admin", "viewer"],
         default="admin",
         help="User role (admin or viewer, default admin)",
+    )
+    parser.add_argument(
+        "--superadmin",
+        action="store_true",
+        default=False,
+        help="Grant superadmin privileges",
     )
 
     args = parser.parse_args()
@@ -51,16 +59,26 @@ def main():
             email=email,
             password_hash=hash_password(password),
             role=role,
+            is_superadmin=args.superadmin,
             is_active=True,
         )
         db.add(user)
+        db.flush()
+
+        try:
+            default_ws_id = get_default_workspace_id(db)
+            ws_role = "owner" if role == "admin" else "viewer"
+            membership = Membership(user_id=user.id, workspace_id=default_ws_id, role=ws_role)
+            db.add(membership)
+        except Exception as e:
+            print(f"Warning: Could not add user to default workspace: {e}", file=sys.stderr)
+
         db.commit()
         db.refresh(user)
-        print(f"Successfully created {role} user: {user.email} (id={user.id})")
+        print(f"Successfully created {role} user: {user.email} (id={user.id}, superadmin={args.superadmin})")
     finally:
         db.close()
 
 
 if __name__ == "__main__":
     main()
-

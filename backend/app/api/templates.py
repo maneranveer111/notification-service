@@ -3,13 +3,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, Security, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.template import Template
 from app.security import Principal, get_principal, require_write
 from app.services.templating import extract_variables
+from app.services.tenancy import scoped
 
 router = APIRouter(
     prefix="/templates",
@@ -68,9 +69,9 @@ def create_template(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_write),
 ):
-    client_id = None if principal.sees_all else principal.client_id
     template = Template(
-        client_id=client_id,
+        workspace_id=principal.workspace_id,
+        client_id=principal.client_id,
         name=payload.name,
         channel=payload.channel,
         subject_template=payload.subject_template,
@@ -88,15 +89,8 @@ def list_templates(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ):
-    stmt = select(Template).order_by(Template.created_at.desc())
-    count_stmt = select(func.count(Template.id))
-    if not principal.sees_all:
-        clause = or_(
-            Template.client_id == principal.client_id,
-            Template.client_id.is_(None),
-        )
-        stmt = stmt.where(clause)
-        count_stmt = count_stmt.where(clause)
+    stmt = scoped(select(Template), Template, principal).order_by(Template.created_at.desc())
+    count_stmt = scoped(select(func.count(Template.id)), Template, principal)
 
     total = db.scalar(count_stmt) or 0
     response.headers["X-Total-Count"] = str(total)
@@ -111,11 +105,9 @@ def get_template(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ):
-    template = db.get(Template, id)
+    stmt = select(Template).where(Template.id == id, Template.workspace_id == principal.workspace_id)
+    template = db.execute(stmt).scalar_one_or_none()
     if not template:
-        raise HTTPException(status_code=404, detail="Template not found")
-
-    if not principal.sees_all and template.client_id is not None and template.client_id != principal.client_id:
         raise HTTPException(status_code=404, detail="Template not found")
 
     return _to_read(template)
@@ -128,16 +120,10 @@ def update_template(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_write),
 ):
-    template = db.get(Template, id)
+    stmt = select(Template).where(Template.id == id, Template.workspace_id == principal.workspace_id)
+    template = db.execute(stmt).scalar_one_or_none()
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
-
-    if not principal.sees_all:
-        if template.client_id != principal.client_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Cannot edit a template you do not own",
-            )
 
     if payload.name is not None:
         template.name = payload.name
@@ -160,18 +146,11 @@ def delete_template(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_write),
 ):
-    template = db.get(Template, id)
+    stmt = select(Template).where(Template.id == id, Template.workspace_id == principal.workspace_id)
+    template = db.execute(stmt).scalar_one_or_none()
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
-
-    if not principal.sees_all:
-        if template.client_id != principal.client_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Cannot delete a template you do not own",
-            )
 
     db.delete(template)
     db.commit()
     return None
-

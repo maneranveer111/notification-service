@@ -22,6 +22,7 @@ from app.api.suppressions import router as suppressions_router
 from app.api.templates import router as templates_router
 from app.api.unsubscribe import router as unsubscribe_router
 from app.api.webhooks import router as webhooks_router
+from app.api.workspaces import router as workspaces_router
 from app.config import get_settings
 from app.database import get_db
 from app.limiter import limiter, rate_limit_exceeded_handler
@@ -124,6 +125,7 @@ app.include_router(suppressions_router)
 app.include_router(unsubscribe_router)
 app.include_router(stats_router)
 app.include_router(metrics_router)
+app.include_router(workspaces_router)
 
 
 @app.get("/health")

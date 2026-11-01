@@ -85,6 +85,7 @@ def _queue_notification(
     provider: str,
     db: Session,
     response: Response,
+    workspace_id: UUID,
     idempotency_key: str | None = None,
     client_id: UUID | None = None,
     template_id: UUID | None = None,
@@ -102,7 +103,7 @@ def _queue_notification(
                 status_code=422,
                 detail="Idempotency-Key header too long (max 200 characters)",
             )
-        scoped_idempotency_key = f"{client_id or 'master'}:{idempotency_key}"
+        scoped_idempotency_key = f"{workspace_id}:{idempotency_key}"
 
         request_hash = _compute_request_hash(
             channel=channel,
@@ -130,9 +131,10 @@ def _queue_notification(
 
     # Suppression check (skip for webhook channel)
     if channel != "webhook":
-        suppression = is_suppressed(db, channel, recipient, category)
+        suppression = is_suppressed(db, workspace_id, channel, recipient, category)
         if suppression:
             notification = Notification(
+                workspace_id=workspace_id,
                 channel=channel,
                 recipient=recipient,
                 subject=subject,
@@ -188,6 +190,7 @@ def _queue_notification(
     initial_status = "scheduled" if scheduled_at else "pending"
 
     notification = Notification(
+        workspace_id=workspace_id,
         channel=channel,
         recipient=recipient,
         subject=subject,
@@ -248,9 +251,6 @@ def queue_email(
     principal: Principal = Depends(require_write),
     idempotency_key: str | None = Header(default=None, max_length=200),
 ):
-    if not isinstance(principal, Principal):
-        principal = Principal(client_id=None, is_admin=True, can_write=True, sees_all=True)
-
     _validate_scheduled_at(payload.scheduled_at, settings.schedule_max_days)
 
     template_id = None
@@ -264,9 +264,7 @@ def queue_email(
                 detail="Cannot provide both template_id and subject/body",
             )
         template = db.get(Template, payload.template_id)
-        if not template:
-            raise HTTPException(status_code=422, detail="Template not found")
-        if not principal.sees_all and template.client_id is not None and template.client_id != principal.client_id:
+        if not template or template.workspace_id != principal.workspace_id:
             raise HTTPException(status_code=422, detail="Template not found")
         if template.channel != "email":
             raise HTTPException(
@@ -297,6 +295,7 @@ def queue_email(
         provider="brevo",
         db=db,
         response=response,
+        workspace_id=principal.workspace_id,
         idempotency_key=idempotency_key,
         client_id=principal.client_id,
         template_id=template_id,
@@ -316,9 +315,6 @@ def queue_sms(
     principal: Principal = Depends(require_write),
     idempotency_key: str | None = Header(default=None, max_length=200),
 ):
-    if not isinstance(principal, Principal):
-        principal = Principal(client_id=None, is_admin=True, can_write=True, sees_all=True)
-
     _validate_scheduled_at(payload.scheduled_at, settings.schedule_max_days)
 
     template_id = None
@@ -331,9 +327,7 @@ def queue_sms(
                 detail="Cannot provide both template_id and message",
             )
         template = db.get(Template, payload.template_id)
-        if not template:
-            raise HTTPException(status_code=422, detail="Template not found")
-        if not principal.sees_all and template.client_id is not None and template.client_id != principal.client_id:
+        if not template or template.workspace_id != principal.workspace_id:
             raise HTTPException(status_code=422, detail="Template not found")
         if template.channel != "sms":
             raise HTTPException(
@@ -363,6 +357,7 @@ def queue_sms(
         provider="twilio",
         db=db,
         response=response,
+        workspace_id=principal.workspace_id,
         idempotency_key=idempotency_key,
         client_id=principal.client_id,
         template_id=template_id,
@@ -382,10 +377,6 @@ def queue_webhook(
     principal: Principal = Depends(require_write),
     idempotency_key: str | None = Header(default=None, max_length=200),
 ):
-    if not isinstance(principal, Principal):
-        principal = Principal(client_id=None, is_admin=True, can_write=True, sees_all=True)
-
-    # Validate URL: must be https and hostname must be in allowlist
     try:
         parsed = urlparse(payload.recipient)
     except Exception:
@@ -412,6 +403,7 @@ def queue_webhook(
         provider=provider,
         db=db,
         response=response,
+        workspace_id=principal.workspace_id,
         idempotency_key=idempotency_key,
         client_id=principal.client_id,
         priority=payload.priority,
@@ -427,9 +419,6 @@ def bulk_notifications(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_write),
 ):
-    if not isinstance(principal, Principal):
-        principal = Principal(client_id=None, is_admin=True, can_write=True, sees_all=True)
-
     if len(payload.recipients) > settings.bulk_max_recipients:
         raise HTTPException(
             status_code=422,
@@ -443,14 +432,12 @@ def bulk_notifications(
 
     _validate_scheduled_at(payload.scheduled_at, settings.schedule_max_days)
 
-    # Marketing requires unsubscribe_secret for email
     if payload.channel == "email" and payload.category == "marketing" and not settings.unsubscribe_secret:
         raise HTTPException(
             status_code=422,
             detail="unsubscribe_secret must be configured to send marketing emails",
         )
 
-    # De-duplicate recipients case-insensitively
     seen = set()
     unique_recipients = []
     for r in payload.recipients:
@@ -467,9 +454,7 @@ def bulk_notifications(
                 detail="Cannot provide both template_id and direct message fields",
             )
         template = db.get(Template, payload.template_id)
-        if not template:
-            raise HTTPException(status_code=422, detail="Template not found")
-        if not principal.sees_all and template.client_id is not None and template.client_id != principal.client_id:
+        if not template or template.workspace_id != principal.workspace_id:
             raise HTTPException(status_code=422, detail="Template not found")
         if template.channel != payload.channel:
             raise HTTPException(
@@ -513,11 +498,11 @@ def bulk_notifications(
             subj = payload.subject if payload.channel == "email" else None
             b_text = payload.body if payload.channel == "email" else payload.message
 
-        # Suppression check per recipient
-        suppression = is_suppressed(db, payload.channel, r.recipient, payload.category)
+        suppression = is_suppressed(db, principal.workspace_id, payload.channel, r.recipient, payload.category)
         if suppression:
             suppressed_count += 1
             notif = Notification(
+                workspace_id=principal.workspace_id,
                 channel=payload.channel,
                 recipient=r.recipient,
                 subject=subj,
@@ -537,6 +522,7 @@ def bulk_notifications(
             continue
 
         notif = Notification(
+            workspace_id=principal.workspace_id,
             channel=payload.channel,
             recipient=r.recipient,
             subject=subj,
@@ -577,13 +563,14 @@ def get_batch_status(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ):
-    if not isinstance(principal, Principal):
-        principal = Principal(client_id=None, is_admin=True, can_write=True, sees_all=True)
-
-    stmt = select(Notification.status, func.count(Notification.id)).where(Notification.batch_id == batch_id)
-    if not principal.sees_all:
-        stmt = stmt.where(Notification.client_id == principal.client_id)
-    stmt = stmt.group_by(Notification.status)
+    stmt = (
+        select(Notification.status, func.count(Notification.id))
+        .where(
+            Notification.batch_id == batch_id,
+            Notification.workspace_id == principal.workspace_id,
+        )
+        .group_by(Notification.status)
+    )
 
     rows = db.execute(stmt).all()
     if not rows:
@@ -605,27 +592,23 @@ def cancel_notification(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_write),
 ):
-    if not isinstance(principal, Principal):
-        principal = Principal(client_id=None, is_admin=True, can_write=True, sees_all=True)
-
     stmt = (
         update(Notification)
         .where(
             Notification.id == notification_id,
             Notification.status == "scheduled",
+            Notification.workspace_id == principal.workspace_id,
         )
+        .values(status="cancelled", updated_at=func.now())
     )
-    if not principal.sees_all:
-        stmt = stmt.where(Notification.client_id == principal.client_id)
-
-    stmt = stmt.values(status="cancelled", updated_at=func.now())
     res = db.execute(stmt)
     db.commit()
 
     if res.rowcount == 0:
-        n_stmt = select(Notification).where(Notification.id == notification_id)
-        if not principal.sees_all:
-            n_stmt = n_stmt.where(Notification.client_id == principal.client_id)
+        n_stmt = select(Notification).where(
+            Notification.id == notification_id,
+            Notification.workspace_id == principal.workspace_id,
+        )
         existing = db.execute(n_stmt).scalar_one_or_none()
         if not existing:
             raise HTTPException(status_code=404, detail="Notification not found")
@@ -651,12 +634,7 @@ def list_notifications(
     limit: int = Query(default=50, ge=1, le=200, description="Number of records to return"),
     offset: int = Query(default=0, ge=0, description="Number of records to skip"),
 ):
-    if not isinstance(principal, Principal):
-        principal = Principal(client_id=None, is_admin=True, can_write=True, sees_all=True)
-
-    filters = []
-    if not principal.sees_all:
-        filters.append(Notification.client_id == principal.client_id)
+    filters = [Notification.workspace_id == principal.workspace_id]
     if status:
         filters.append(Notification.status == status)
     if channel:
@@ -667,11 +645,8 @@ def list_notifications(
         escaped = recipient.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         filters.append(Notification.recipient.ilike(f"%{escaped}%"))
 
-    count_stmt = select(func.count(Notification.id))
-    base_stmt = select(Notification)
-    if filters:
-        count_stmt = count_stmt.where(*filters)
-        base_stmt = base_stmt.where(*filters)
+    count_stmt = select(func.count(Notification.id)).where(*filters)
+    base_stmt = select(Notification).where(*filters)
 
     total_count = db.scalar(count_stmt) or 0
     response.headers["X-Total-Count"] = str(total_count)
@@ -689,15 +664,9 @@ def get_notification(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ):
-    if not isinstance(principal, Principal):
-        principal = Principal(client_id=None, is_admin=True, can_write=True, sees_all=True)
-
     notification = db.get(Notification, notification_id)
 
-    if not notification:
-        raise HTTPException(status_code=404, detail="Notification not found")
-
-    if not principal.sees_all and notification.client_id != principal.client_id:
+    if not notification or notification.workspace_id != principal.workspace_id:
         raise HTTPException(status_code=404, detail="Notification not found")
 
     return notification
@@ -709,14 +678,8 @@ def get_notification_timeline(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ):
-    if not isinstance(principal, Principal):
-        principal = Principal(client_id=None, is_admin=True, can_write=True, sees_all=True)
-
     notification = db.get(Notification, notification_id)
-    if not notification:
-        raise HTTPException(status_code=404, detail="Notification not found")
-
-    if not principal.sees_all and notification.client_id != principal.client_id:
+    if not notification or notification.workspace_id != principal.workspace_id:
         raise HTTPException(status_code=404, detail="Notification not found")
 
     attempts = db.scalars(
@@ -735,15 +698,9 @@ def retry_notification(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_write),
 ):
-    if not isinstance(principal, Principal):
-        principal = Principal(client_id=None, is_admin=True, can_write=True, sees_all=True)
-
     notification = db.get(Notification, notification_id)
 
-    if not notification:
-        raise HTTPException(status_code=404, detail="Notification not found")
-
-    if not principal.sees_all and notification.client_id != principal.client_id:
+    if not notification or notification.workspace_id != principal.workspace_id:
         raise HTTPException(status_code=404, detail="Notification not found")
 
     if notification.status != "failed":
@@ -770,6 +727,7 @@ def retry_notification(
         .where(
             Notification.id == notification_id,
             Notification.status == "failed",
+            Notification.workspace_id == principal.workspace_id,
         )
         .values(
             status="pending",

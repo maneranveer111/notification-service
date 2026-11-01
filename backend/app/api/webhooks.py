@@ -3,6 +3,7 @@ import logging
 import re
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 from urllib.parse import parse_qs
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -52,16 +53,21 @@ def _is_valid_email(email: str | None) -> bool:
     return bool(_EMAIL_REGEX.match(email))
 
 
-def _upsert_suppression(db: Session, channel: str, recipient: str, reason: str, source: str) -> None:
+def _upsert_suppression(db: Session, channel: str, recipient: str, reason: str, source: str, workspace_id: Any | None = None) -> None:
     """
     Idempotent upsert.
-    When a hard bounce arrives for an existing (channel, recipient) with reason='opt_out',
+    When a hard bounce arrives for an existing (workspace_id, channel, recipient) with reason='opt_out',
     escalate atomically to reason='bounce' and source='bounce'.
     """
+    if not workspace_id:
+        from app.services.tenancy import get_default_workspace_id
+        workspace_id = get_default_workspace_id(db)
+
     recipient_lower = recipient.strip().lower()
     stmt = (
         pg_insert(Suppression)
         .values(
+            workspace_id=workspace_id,
             channel=channel,
             recipient=recipient_lower,
             reason=reason,
@@ -70,7 +76,7 @@ def _upsert_suppression(db: Session, channel: str, recipient: str, reason: str, 
     )
     if reason == "bounce":
         stmt = stmt.on_conflict_do_update(
-            constraint="uq_suppressions_channel_recipient",
+            constraint="uq_suppressions_workspace_channel_recipient",
             set_=dict(
                 reason="bounce",
                 source="bounce",
@@ -78,7 +84,7 @@ def _upsert_suppression(db: Session, channel: str, recipient: str, reason: str, 
             where=(Suppression.reason == "opt_out"),
         )
     else:
-        stmt = stmt.on_conflict_do_nothing(constraint="uq_suppressions_channel_recipient")
+        stmt = stmt.on_conflict_do_nothing(constraint="uq_suppressions_workspace_channel_recipient")
     db.execute(stmt)
 
 
@@ -123,12 +129,14 @@ def apply_delivery_event(
                 bounce_recipient = candidate.strip()
 
         if bounce_recipient:
+            ws_id = getattr(notification, "workspace_id", None)
             _upsert_suppression(
                 db=db,
                 channel="email",
                 recipient=bounce_recipient,
                 reason="bounce",
                 source="bounce",
+                workspace_id=ws_id,
             )
 
     db.commit()

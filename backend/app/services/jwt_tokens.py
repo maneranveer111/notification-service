@@ -10,6 +10,7 @@ def create_access_token(
     user_id: Any,
     email: str | None = None,
     role: str | None = None,
+    workspace_id: Any | None = None,
     expires_delta: timedelta | None = None,
 ) -> str:
     settings = get_settings()
@@ -34,6 +35,8 @@ def create_access_token(
         payload["email"] = email
     if role is not None:
         payload["role"] = role
+    if workspace_id is not None:
+        payload["ws"] = str(workspace_id)
 
     return jwt.encode(payload, secret, algorithm="HS256")
 

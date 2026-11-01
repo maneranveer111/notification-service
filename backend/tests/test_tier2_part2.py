@@ -191,8 +191,19 @@ def test_cancel_non_scheduled_notification_returns_409():
 
 
 def test_cancel_unknown_or_other_client_returns_404():
-    _, key_a = _create_test_client(f"client_a_{uuid.uuid4().hex[:8]}")
-    _, key_b = _create_test_client(f"client_b_{uuid.uuid4().hex[:8]}")
+    client_a_data, key_a = _create_test_client(f"client_a_{uuid.uuid4().hex[:8]}")
+    client_b_data, key_b = _create_test_client(f"client_b_{uuid.uuid4().hex[:8]}")
+
+    # Move client B to a distinct workspace
+    db = next(get_db())
+    from app.models.workspace import Workspace
+    ws_b = Workspace(name="WS B Cancel", slug=f"ws-b-cancel-{uuid.uuid4().hex[:6]}")
+    db.add(ws_b)
+    db.commit()
+    db.refresh(ws_b)
+    client_b_row = db.get(ApiClient, client_b_data["id"])
+    client_b_row.workspace_id = ws_b.id
+    db.commit()
 
     future_time = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
     resp = client.post(
@@ -325,8 +336,19 @@ def test_batch_status_counts():
 
 
 def test_batch_scoping_other_client_returns_404():
-    _, key_a = _create_test_client(f"client_batch_a_{uuid.uuid4().hex[:8]}")
-    _, key_b = _create_test_client(f"client_batch_b_{uuid.uuid4().hex[:8]}")
+    client_a_data, key_a = _create_test_client(f"client_batch_a_{uuid.uuid4().hex[:8]}")
+    client_b_data, key_b = _create_test_client(f"client_batch_b_{uuid.uuid4().hex[:8]}")
+
+    # Move client B to a distinct workspace
+    db = next(get_db())
+    from app.models.workspace import Workspace
+    ws_b = Workspace(name="WS B Batch", slug=f"ws-b-batch-{uuid.uuid4().hex[:6]}")
+    db.add(ws_b)
+    db.commit()
+    db.refresh(ws_b)
+    client_b_row = db.get(ApiClient, client_b_data["id"])
+    client_b_row.workspace_id = ws_b.id
+    db.commit()
 
     resp = client.post(
         "/notifications/bulk",

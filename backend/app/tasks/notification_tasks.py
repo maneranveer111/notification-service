@@ -164,7 +164,7 @@ def _deliver(task: Task, notification_id: str, send_fn) -> dict:
         if notification.scheduled_at is not None and notification.channel != "webhook":
             from app.services.suppression_service import is_suppressed
             category = getattr(notification, "category", "transactional") or "transactional"
-            suppression = is_suppressed(db, notification.channel, notification.recipient, category)
+            suppression = is_suppressed(db, getattr(notification, "workspace_id", None), notification.channel, notification.recipient, category)
             if suppression:
                 notification.status = "suppressed"
                 notification.error_message = f"Recipient suppressed ({suppression.reason})"
@@ -206,7 +206,7 @@ def _deliver(task: Task, notification_id: str, send_fn) -> dict:
             _secret = settings.unsubscribe_secret
             if _secret:
                 from app.services.unsubscribe import make_token
-                _token = make_token("email", notification.recipient)
+                _token = make_token("email", notification.recipient, workspace_id=getattr(notification, "workspace_id", None))
                 _footer = f"\n\n---\nTo unsubscribe: {settings.public_base_url}/unsubscribe?token={_token}"
                 original_body = notification.body or ""
 

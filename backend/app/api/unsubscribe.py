@@ -82,15 +82,21 @@ async def unsubscribe_confirm(
     channel, recipient = result
     recipient_lower = recipient.strip().lower()
 
+    ws_id = getattr(result, "workspace_id", None)
+    if not ws_id:
+        from app.services.tenancy import get_default_workspace_id
+        ws_id = get_default_workspace_id(db)
+
     stmt = (
         pg_insert(Suppression)
         .values(
+            workspace_id=ws_id,
             channel=channel,
             recipient=recipient_lower,
             reason="opt_out",
             source="unsubscribe_link",
         )
-        .on_conflict_do_nothing(constraint="uq_suppressions_channel_recipient")
+        .on_conflict_do_nothing(constraint="uq_suppressions_workspace_channel_recipient")
     )
     db.execute(stmt)
     db.commit()

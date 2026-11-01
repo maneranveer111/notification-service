@@ -40,9 +40,10 @@ def get_stats_overview(
     now = datetime.now(timezone.utc)
     since = now - timedelta(hours=window_hours)
 
-    base_conditions = [Notification.created_at >= since]
-    if not principal.sees_all:
-        base_conditions.append(Notification.client_id == principal.client_id)
+    base_conditions = [
+        Notification.created_at >= since,
+        Notification.workspace_id == principal.workspace_id,
+    ]
 
     # Status breakdown
     status_rows = db.execute(
@@ -93,7 +94,7 @@ def get_stats_overview(
     ).all()
     top_errors = [TopErrorItem(error=row[0], count=row[1]) for row in error_rows]
 
-    queues = _get_queue_depths() if principal.sees_all else {}
+    queues = _get_queue_depths() if principal.is_superadmin else {}
 
     return StatsOverviewResponse(
         window_hours=window_hours,
@@ -130,9 +131,8 @@ def get_stats_timeseries(
     base_conditions = [
         Notification.created_at >= start_time,
         Notification.created_at <= end_time,
+        Notification.workspace_id == principal.workspace_id,
     ]
-    if not principal.sees_all:
-        base_conditions.append(Notification.client_id == principal.client_id)
 
     # Query grouped by date_trunc
     stmt = (
@@ -153,7 +153,6 @@ def get_stats_timeseries(
         status_val = row[1]
         count_val = row[2]
 
-        # Map to nearest bucket_hours step
         delta_hours = int((raw_bucket - start_time).total_seconds() // 3600)
         bucket_index = (delta_hours // bucket_hours) * bucket_hours
         aligned_bucket = start_time + timedelta(hours=bucket_index)

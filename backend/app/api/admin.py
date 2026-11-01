@@ -3,7 +3,7 @@ import hashlib
 import secrets
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Security, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -14,7 +14,7 @@ from app.models.api_client import ApiClient
 from app.models.notification import Notification
 from app.models.user import User
 from app.schemas.user import UserCreate, UserRead, UserUpdate
-from app.security import Principal, require_admin
+from app.security import Principal, require_admin, require_superadmin
 from app.services.passwords import hash_password
 
 router = APIRouter(
@@ -84,9 +84,14 @@ def _generate_api_key() -> tuple[str, str, str]:
 
 
 @router.post("/clients", response_model=ClientCreatedResponse, status_code=status.HTTP_201_CREATED)
-def create_client(payload: ClientCreate, db: Session = Depends(get_db)):
+def create_client(
+    payload: ClientCreate,
+    principal: Principal = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
     raw_key, key_hash, key_prefix = _generate_api_key()
     client = ApiClient(
+        workspace_id=principal.workspace_id,
         name=payload.name,
         key_hash=key_hash,
         key_prefix=key_prefix,
@@ -116,15 +121,26 @@ def create_client(payload: ClientCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/clients", response_model=list[ClientRead])
-def list_clients(db: Session = Depends(get_db)):
-    clients = db.execute(select(ApiClient).order_by(ApiClient.created_at.desc())).scalars().all()
+def list_clients(
+    principal: Principal = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    clients = db.execute(
+        select(ApiClient)
+        .where(ApiClient.workspace_id == principal.workspace_id)
+        .order_by(ApiClient.created_at.desc())
+    ).scalars().all()
     return clients
 
 
 @router.post("/clients/{id}/rotate", response_model=ClientRotateResponse)
-def rotate_client_key(id: UUID, db: Session = Depends(get_db)):
+def rotate_client_key(
+    id: UUID,
+    principal: Principal = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
     client = db.get(ApiClient, id)
-    if not client:
+    if not client or client.workspace_id != principal.workspace_id:
         raise HTTPException(status_code=404, detail="Client not found")
 
     raw_key, key_hash, key_prefix = _generate_api_key()
@@ -140,9 +156,13 @@ def rotate_client_key(id: UUID, db: Session = Depends(get_db)):
 
 
 @router.post("/clients/{id}/revoke", response_model=ClientRevokeResponse)
-def revoke_client(id: UUID, db: Session = Depends(get_db)):
+def revoke_client(
+    id: UUID,
+    principal: Principal = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
     client = db.get(ApiClient, id)
-    if not client:
+    if not client or client.workspace_id != principal.workspace_id:
         raise HTTPException(status_code=404, detail="Client not found")
 
     client.is_active = False
@@ -154,14 +174,21 @@ def revoke_client(id: UUID, db: Session = Depends(get_db)):
 
 
 @router.get("/clients/{id}/usage", response_model=ClientUsageResponse)
-def get_client_usage(id: UUID, db: Session = Depends(get_db)):
+def get_client_usage(
+    id: UUID,
+    principal: Principal = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
     client = db.get(ApiClient, id)
-    if not client:
+    if not client or client.workspace_id != principal.workspace_id:
         raise HTTPException(status_code=404, detail="Client not found")
 
     status_counts_rows = db.execute(
         select(Notification.status, func.count(Notification.id))
-        .where(Notification.client_id == id)
+        .where(
+            Notification.client_id == id,
+            Notification.workspace_id == principal.workspace_id,
+        )
         .group_by(Notification.status)
     ).all()
 
@@ -173,6 +200,7 @@ def get_client_usage(id: UUID, db: Session = Depends(get_db)):
     last_24h = db.execute(
         select(func.count(Notification.id)).where(
             Notification.client_id == id,
+            Notification.workspace_id == principal.workspace_id,
             Notification.created_at >= since,
         )
     ).scalar() or 0
@@ -185,7 +213,12 @@ def get_client_usage(id: UUID, db: Session = Depends(get_db)):
     )
 
 
-@router.post("/users", response_model=UserRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/users",
+    response_model=UserRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Security(require_superadmin)],
+)
 def create_user(payload: UserCreate, db: Session = Depends(get_db)):
     email = payload.email.strip().lower()
     existing = db.scalar(select(User).where(User.email == email))
@@ -207,7 +240,11 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)):
     return user
 
 
-@router.get("/users", response_model=list[UserRead])
+@router.get(
+    "/users",
+    response_model=list[UserRead],
+    dependencies=[Security(require_superadmin)],
+)
 def list_users(db: Session = Depends(get_db)):
     users = db.scalars(select(User).order_by(User.created_at.desc())).all()
     return list(users)
@@ -217,7 +254,7 @@ def list_users(db: Session = Depends(get_db)):
 def update_user(
     id: UUID,
     payload: UserUpdate,
-    principal: Principal = Depends(require_admin),
+    principal: Principal = Depends(require_superadmin),
     db: Session = Depends(get_db),
 ):
     user = db.get(User, id)
@@ -264,5 +301,3 @@ def update_user(
     db.commit()
     db.refresh(user)
     return user
-
-

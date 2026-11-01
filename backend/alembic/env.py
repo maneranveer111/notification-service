@@ -35,6 +35,7 @@ from app.models.template import Template
 from app.models.suppression import Suppression
 from app.models.user import User
 from app.models.delivery_attempt import DeliveryAttempt
+from app.models.workspace import Workspace, Membership
 
 target_metadata = Base.metadata
 

@@ -1,0 +1,292 @@
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from app.config import get_settings
+from app.database import get_db
+from app.models.user import User
+from app.models.workspace import Membership, Workspace
+from app.schemas.auth import WorkspaceInfo
+from app.security import Principal, get_principal, get_user_principal, require_admin
+from app.services.jwt_tokens import create_access_token
+from app.services.tenancy import generate_workspace_slug
+
+router = APIRouter(tags=["Workspaces"])
+settings = get_settings()
+
+
+class WorkspaceCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+
+
+class WorkspaceUpdate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+
+
+class MemberRoleUpdate(BaseModel):
+    role: str = Field(..., pattern="^(owner|admin|viewer)$")
+
+
+class SwitchWorkspaceRequest(BaseModel):
+    workspace_id: UUID
+
+
+class TokenSwitchResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    workspace: WorkspaceInfo
+
+
+def _require_admin_role(principal: Principal) -> None:
+    if not principal.workspace_role or principal.workspace_role not in ("owner", "admin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required.")
+
+
+@router.get("/workspaces", response_model=list[WorkspaceInfo])
+def list_workspaces(
+    principal: Principal = Depends(get_user_principal),
+    db: Session = Depends(get_db),
+):
+    if not principal.user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User authentication required.")
+    memberships = db.execute(
+        select(Membership).where(Membership.user_id == principal.user_id)
+    ).scalars().all()
+    result = []
+    for m in memberships:
+        ws = db.get(Workspace, m.workspace_id)
+        if ws:
+            result.append(WorkspaceInfo(id=ws.id, name=ws.name, slug=ws.slug, role=m.role))
+    return result
+
+
+@router.post("/workspaces", response_model=WorkspaceInfo, status_code=status.HTTP_201_CREATED)
+def create_workspace(
+    payload: WorkspaceCreate,
+    principal: Principal = Depends(get_user_principal),
+    db: Session = Depends(get_db),
+):
+    if not principal.user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User authentication required.")
+
+    count = db.scalar(
+        select(func.count(Membership.user_id)).where(Membership.user_id == principal.user_id)
+    ) or 0
+    if count >= settings.max_workspaces_per_user:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Maximum workspace limit ({settings.max_workspaces_per_user}) reached.",
+        )
+
+    for _ in range(5):
+        slug = generate_workspace_slug(payload.name)
+        existing = db.execute(select(Workspace).where(Workspace.slug == slug)).scalar_one_or_none()
+        if not existing:
+            break
+    else:
+        slug = generate_workspace_slug(payload.name + "-ws")
+
+    ws = Workspace(name=payload.name, slug=slug)
+    db.add(ws)
+    db.flush()
+
+    membership = Membership(user_id=principal.user_id, workspace_id=ws.id, role="owner")
+    db.add(membership)
+    db.commit()
+    db.refresh(ws)
+
+    return WorkspaceInfo(id=ws.id, name=ws.name, slug=ws.slug, role="owner")
+
+
+@router.post("/auth/switch-workspace", response_model=TokenSwitchResponse)
+def switch_workspace(
+    payload: SwitchWorkspaceRequest,
+    principal: Principal = Depends(get_user_principal),
+    db: Session = Depends(get_db),
+):
+    if not principal.user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User authentication required.")
+
+    membership = db.get(Membership, (principal.user_id, payload.workspace_id))
+    if not membership:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No access to this workspace.")
+
+    ws = db.get(Workspace, payload.workspace_id)
+    if not ws:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found.")
+
+    user = db.get(User, principal.user_id)
+    if user:
+        user.last_workspace_id = ws.id
+        db.commit()
+
+    token = create_access_token(
+        user_id=principal.user_id,
+        email=principal.email,
+        role=membership.role,
+        workspace_id=ws.id,
+    )
+    return TokenSwitchResponse(
+        access_token=token,
+        token_type="bearer",
+        expires_in=settings.jwt_expire_minutes * 60,
+        workspace=WorkspaceInfo(id=ws.id, name=ws.name, slug=ws.slug, role=membership.role),
+    )
+
+
+@router.get("/workspaces/current", response_model=WorkspaceInfo)
+def get_current_workspace(
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_db),
+):
+    if not principal.workspace_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active workspace.")
+    ws = db.get(Workspace, principal.workspace_id)
+    if not ws:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found.")
+    return WorkspaceInfo(id=ws.id, name=ws.name, slug=ws.slug, role=principal.workspace_role or "")
+
+
+@router.patch("/workspaces/current", response_model=WorkspaceInfo)
+def update_current_workspace(
+    payload: WorkspaceUpdate,
+    principal: Principal = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _require_admin_role(principal)
+    if not principal.workspace_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active workspace.")
+    ws = db.get(Workspace, principal.workspace_id)
+    if not ws:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found.")
+    ws.name = payload.name
+    db.commit()
+    db.refresh(ws)
+    return WorkspaceInfo(id=ws.id, name=ws.name, slug=ws.slug, role=principal.workspace_role or "")
+
+
+@router.get("/workspaces/current/members", response_model=list[dict])
+def list_members(
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_db),
+):
+    if not principal.workspace_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active workspace.")
+    memberships = db.execute(
+        select(Membership).where(Membership.workspace_id == principal.workspace_id)
+    ).scalars().all()
+    result = []
+    for m in memberships:
+        user = db.get(User, m.user_id)
+        if user:
+            result.append({
+                "user_id": str(m.user_id),
+                "email": user.email,
+                "role": m.role,
+            })
+    return result
+
+
+@router.patch("/workspaces/current/members/{user_id}", response_model=dict)
+def update_member_role(
+    user_id: UUID,
+    payload: MemberRoleUpdate,
+    principal: Principal = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _require_admin_role(principal)
+    if not principal.workspace_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No active workspace.")
+
+    if principal.user_id == user_id:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot change your own role.")
+
+    membership = db.get(Membership, (user_id, principal.workspace_id))
+    if not membership:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found.")
+
+    if membership.role == "owner" and principal.workspace_role != "owner":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot modify an owner.")
+
+    if payload.role == "owner" and principal.workspace_role != "owner":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner can grant owner role.")
+
+    if membership.role == "owner" and payload.role != "owner":
+        owner_count = db.scalar(
+            select(func.count(Membership.user_id)).where(
+                Membership.workspace_id == principal.workspace_id,
+                Membership.role == "owner",
+            )
+        ) or 0
+        if owner_count <= 1:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot demote the last owner.")
+
+    membership.role = payload.role
+    db.commit()
+    user = db.get(User, user_id)
+    return {"user_id": str(user_id), "email": user.email if user else None, "role": membership.role}
+
+
+@router.delete("/workspaces/current/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_member(
+    user_id: UUID,
+    principal: Principal = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _require_admin_role(principal)
+    if not principal.workspace_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No active workspace.")
+
+    if principal.user_id == user_id:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot remove yourself.")
+
+    membership = db.get(Membership, (user_id, principal.workspace_id))
+    if not membership:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found.")
+
+    if membership.role == "owner" and principal.workspace_role != "owner":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot remove an owner.")
+
+    if membership.role == "owner":
+        owner_count = db.scalar(
+            select(func.count(Membership.user_id)).where(
+                Membership.workspace_id == principal.workspace_id,
+                Membership.role == "owner",
+            )
+        ) or 0
+        if owner_count <= 1:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot remove the last owner.")
+
+    db.delete(membership)
+    db.commit()
+
+
+@router.post("/workspaces/current/leave", status_code=status.HTTP_204_NO_CONTENT)
+def leave_workspace(
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_db),
+):
+    if not principal.user_id or not principal.workspace_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Authentication required.")
+
+    membership = db.get(Membership, (principal.user_id, principal.workspace_id))
+    if not membership:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not a member of this workspace.")
+
+    if membership.role == "owner":
+        owner_count = db.scalar(
+            select(func.count(Membership.user_id)).where(
+                Membership.workspace_id == principal.workspace_id,
+                Membership.role == "owner",
+            )
+        ) or 0
+        if owner_count <= 1:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot leave: you are the last owner.")
+
+    db.delete(membership)
+    db.commit()
+

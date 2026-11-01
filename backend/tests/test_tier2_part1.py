@@ -125,8 +125,20 @@ def test_client_over_limit_returns_429(monkeypatch):
 
 
 def test_client_ownership_scoping():
-    _, key_a = _create_test_client(f"client_a_{uuid.uuid4().hex[:8]}")
-    _, key_b = _create_test_client(f"client_b_{uuid.uuid4().hex[:8]}")
+    client_a_data, key_a = _create_test_client(f"client_a_{uuid.uuid4().hex[:8]}")
+    client_b_data, key_b = _create_test_client(f"client_b_{uuid.uuid4().hex[:8]}")
+
+    # Move client B to a distinct workspace to test workspace isolation
+    db = next(get_db())
+    from app.models.workspace import Workspace
+    ws_b = Workspace(name="WS B", slug=f"ws-b-{uuid.uuid4().hex[:6]}")
+    db.add(ws_b)
+    db.commit()
+    db.refresh(ws_b)
+
+    client_b_row = db.get(ApiClient, client_b_data["id"])
+    client_b_row.workspace_id = ws_b.id
+    db.commit()
 
     create_resp = client.post(
         "/notifications/email",
@@ -188,8 +200,20 @@ def test_plaintext_key_only_at_create_rotate_db_stores_hash():
 
 
 def test_same_idempotency_key_two_clients_creates_two_rows():
-    _, key_a = _create_test_client(f"idemp_a_{uuid.uuid4().hex[:8]}")
-    _, key_b = _create_test_client(f"idemp_b_{uuid.uuid4().hex[:8]}")
+    client_a_data, key_a = _create_test_client(f"idemp_a_{uuid.uuid4().hex[:8]}")
+    client_b_data, key_b = _create_test_client(f"idemp_b_{uuid.uuid4().hex[:8]}")
+
+    # Move client B to a distinct workspace
+    db = next(get_db())
+    from app.models.workspace import Workspace
+    ws_b = Workspace(name="WS B Idem", slug=f"ws-b-idem-{uuid.uuid4().hex[:6]}")
+    db.add(ws_b)
+    db.commit()
+    db.refresh(ws_b)
+
+    client_b_row = db.get(ApiClient, client_b_data["id"])
+    client_b_row.workspace_id = ws_b.id
+    db.commit()
 
     idem_key = f"shared-idem-key-{uuid.uuid4().hex[:6]}"
 
