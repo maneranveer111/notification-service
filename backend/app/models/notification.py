@@ -41,7 +41,7 @@ class Notification(Base):
     )
     template_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("templates.id"),
+        ForeignKey("templates.id", ondelete="SET NULL"),
         nullable=True,
     )
 
