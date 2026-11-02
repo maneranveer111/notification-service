@@ -30,6 +30,8 @@ from app.schemas.notification import (
 )
 from app.schemas.stats import TimelineItem
 from app.security import Principal, get_principal, require_write
+from app.services.plans import get_effective_bulk_max
+from app.services.quota import consume_quota, release_quota
 from app.services.suppression_service import is_suppressed
 from app.services.templating import MissingVariables, render
 from app.tasks.notification_tasks import (
@@ -210,11 +212,17 @@ def _queue_notification(
     )
     db.add(notification)
 
+    ws = db.get(Workspace, workspace_id) if workspace_id else None
+    if ws:
+        consume_quota(ws, 1)
+
     try:
         db.commit()
         db.refresh(notification)
     except IntegrityError:
         db.rollback()
+        if ws:
+            release_quota(ws, 1)
         if scoped_idempotency_key:
             existing = db.execute(
                 select(Notification).where(Notification.idempotency_key == scoped_idempotency_key)
@@ -231,6 +239,11 @@ def _queue_notification(
                     status=existing.status,
                     channel=existing.channel,
                 )
+        raise
+    except Exception:
+        db.rollback()
+        if ws:
+            release_quota(ws, 1)
         raise
 
     if not scheduled_at:
@@ -435,10 +448,18 @@ def bulk_notifications(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_write),
 ):
-    if len(payload.recipients) > settings.bulk_max_recipients:
+    ws = db.get(Workspace, principal.workspace_id) if principal.workspace_id else None
+    plan_name = getattr(ws, "plan", "free") if ws else "free"
+    effective_max = get_effective_bulk_max(plan_name)
+    if len(payload.recipients) > effective_max:
         raise HTTPException(
             status_code=422,
-            detail=f"Recipient count exceeds maximum of {settings.bulk_max_recipients}",
+            detail={
+                "detail": f"Recipient count exceeds maximum of {effective_max}",
+                "code": "plan_limit",
+                "resource": "bulk_recipients",
+                "limit": effective_max,
+            },
         )
     if len(payload.recipients) == 0:
         raise HTTPException(
@@ -448,7 +469,6 @@ def bulk_notifications(
 
     _validate_scheduled_at(payload.scheduled_at, settings.schedule_max_days)
 
-    ws = db.get(Workspace, principal.workspace_id) if principal.workspace_id else None
     if payload.channel == "email" and not has_email_provider(db, ws):
         raise HTTPException(
             status_code=422,
@@ -567,9 +587,19 @@ def bulk_notifications(
         db.add(notif)
         created_notifications.append(notif)
 
-    db.commit()
-    for n in created_notifications:
-        db.refresh(n)
+    non_suppressed_count = len(created_notifications) - suppressed_count
+    if ws and non_suppressed_count > 0:
+        consume_quota(ws, non_suppressed_count)
+
+    try:
+        db.commit()
+        for n in created_notifications:
+            db.refresh(n)
+    except Exception:
+        db.rollback()
+        if ws and non_suppressed_count > 0:
+            release_quota(ws, non_suppressed_count)
+        raise
 
     if not payload.scheduled_at:
         for n in created_notifications:

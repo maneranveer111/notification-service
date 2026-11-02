@@ -3,7 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -14,6 +14,7 @@ from app.models.workspace import Membership, Workspace
 from app.security import Principal, require_admin
 from app.services.account_emails import invitation_email
 from app.services.action_tokens import make_invite_token
+from app.services.plans import get_plan
 from app.services.system_mail import queue_system_email
 
 router = APIRouter(
@@ -51,6 +52,38 @@ def create_invitation(
 ):
     if not principal.workspace_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active workspace")
+
+    ws = db.get(Workspace, principal.workspace_id)
+    plan = get_plan(ws.plan if ws else "free")
+    members_limit = plan.get("members")
+    if members_limit is not None:
+        members_count = (
+            db.scalar(
+                select(func.count(Membership.user_id)).where(
+                    Membership.workspace_id == principal.workspace_id
+                )
+            )
+            or 0
+        )
+        pending_count = (
+            db.scalar(
+                select(func.count(Invitation.id)).where(
+                    Invitation.workspace_id == principal.workspace_id,
+                    Invitation.status == "pending",
+                )
+            )
+            or 0
+        )
+        if (members_count + pending_count) >= members_limit:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "detail": f"Member limit reached for {ws.plan if ws else 'free'} plan ({members_limit})",
+                    "code": "plan_limit",
+                    "resource": "members",
+                    "limit": members_limit,
+                },
+            )
 
     target_email = payload.email.strip().lower()
 

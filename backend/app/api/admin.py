@@ -16,6 +16,7 @@ from app.models.user import User
 from app.models.workspace import Membership, Workspace
 from app.schemas.user import UserCreate, UserRead, UserUpdate
 from app.security import Principal, require_admin, require_superadmin
+from app.services.plans import PLANS, get_plan
 from app.services.passwords import hash_password
 
 router = APIRouter(
@@ -90,6 +91,30 @@ def create_client(
     principal: Principal = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    ws = db.get(Workspace, principal.workspace_id)
+    plan = get_plan(ws.plan if ws else "free")
+    api_keys_limit = plan.get("api_keys")
+    if api_keys_limit is not None:
+        active_count = (
+            db.scalar(
+                select(func.count(ApiClient.id)).where(
+                    ApiClient.workspace_id == principal.workspace_id,
+                    ApiClient.is_active == True,
+                )
+            )
+            or 0
+        )
+        if active_count >= api_keys_limit:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "detail": f"API key limit reached for {ws.plan if ws else 'free'} plan ({api_keys_limit})",
+                    "code": "plan_limit",
+                    "resource": "api_keys",
+                    "limit": api_keys_limit,
+                },
+            )
+
     raw_key, key_hash, key_prefix = _generate_api_key()
     client = ApiClient(
         workspace_id=principal.workspace_id,
@@ -311,6 +336,7 @@ class AdminWorkspaceRead(BaseModel):
     name: str
     slug: str
     use_platform_providers: bool
+    plan: str
     member_count: int
     created_at: datetime
 
@@ -318,7 +344,8 @@ class AdminWorkspaceRead(BaseModel):
 
 
 class AdminWorkspaceUpdate(BaseModel):
-    use_platform_providers: bool
+    use_platform_providers: bool | None = None
+    plan: str | None = None
 
 
 @router.get(
@@ -355,6 +382,7 @@ def list_workspaces_admin(
             name=ws.name,
             slug=ws.slug,
             use_platform_providers=ws.use_platform_providers,
+            plan=ws.plan,
             member_count=count,
             created_at=ws.created_at,
         )
@@ -377,7 +405,17 @@ def update_workspace_admin(
     if not ws:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
 
-    ws.use_platform_providers = payload.use_platform_providers
+    if payload.plan is not None:
+        if payload.plan not in PLANS:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid plan '{payload.plan}'. Must be one of: {list(PLANS.keys())}",
+            )
+        ws.plan = payload.plan
+
+    if payload.use_platform_providers is not None:
+        ws.use_platform_providers = payload.use_platform_providers
+
     db.commit()
     db.refresh(ws)
 
@@ -391,6 +429,7 @@ def update_workspace_admin(
         name=ws.name,
         slug=ws.slug,
         use_platform_providers=ws.use_platform_providers,
+        plan=ws.plan,
         member_count=count,
         created_at=ws.created_at,
     )

@@ -13,6 +13,7 @@ from app.models.workspace import Membership, Workspace
 from app.schemas.auth import WorkspaceInfo
 from app.security import Principal, get_principal, get_user_principal, require_admin
 from app.services.jwt_tokens import create_access_token
+from app.services.quota import get_usage
 from app.services.tenancy import generate_workspace_slug
 
 router = APIRouter(tags=["Workspaces"])
@@ -45,6 +46,19 @@ class TokenSwitchResponse(BaseModel):
 def _require_admin_role(principal: Principal) -> None:
     if not principal.workspace_role or principal.workspace_role not in ("owner", "admin"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required.")
+
+
+@router.get("/usage")
+def get_workspace_usage(
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_db),
+):
+    if not principal.workspace_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active workspace")
+    ws = db.get(Workspace, principal.workspace_id)
+    if not ws:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+    return get_usage(ws, db)
 
 
 @router.get("/workspaces", response_model=list[WorkspaceInfo])

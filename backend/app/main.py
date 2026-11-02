@@ -30,6 +30,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.limiter import limiter, rate_limit_exceeded_handler
 from app.security import ClientRateLimitExceeded
+from app.services.quota import QuotaExceeded
 
 settings = get_settings()
 
@@ -90,6 +91,15 @@ def client_rate_limit_exceeded_handler(request: Request, exc: ClientRateLimitExc
             "retry_after": "60 seconds",
         },
         headers={"Retry-After": "60"},
+    )
+
+
+@app.exception_handler(QuotaExceeded)
+async def quota_exceeded_handler(request: Request, exc: QuotaExceeded) -> JSONResponse:
+    return JSONResponse(
+        status_code=429,
+        content=exc.to_dict(),
+        headers={"Retry-After": str(exc.retry_after)},
     )
 
 

@@ -24,6 +24,7 @@ from app.services.action_tokens import (
     make_reset_token,
     make_verify_email_token,
 )
+from app.services.captcha import verify_captcha
 from app.services.jwt_tokens import create_access_token, decode_access_token
 from app.services.passwords import hash_password, verify_password
 from app.services.rate_limit import check_rate_limit
@@ -38,6 +39,7 @@ class SignupRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8)
     workspace_name: str | None = Field(default=None, max_length=100)
+    captcha_token: str | None = None
 
 
 class VerifyEmailRequest(BaseModel):
@@ -46,10 +48,12 @@ class VerifyEmailRequest(BaseModel):
 
 class ResendVerificationRequest(BaseModel):
     email: EmailStr
+    captcha_token: str | None = None
 
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
+    captcha_token: str | None = None
 
 
 class ResetPasswordRequest(BaseModel):
@@ -117,15 +121,12 @@ def _build_token_response(user: User, db: Session, target_ws_id: UUID | None = N
 @router.post("/signup")
 @limiter.limit("5/hour", key_func=client_ip)
 def signup(request: Request, payload: SignupRequest, db: Session = Depends(get_db)):
+    verify_captcha(request, payload.captcha_token)
+
     if settings.signup_mode == "closed":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Signups are closed",
-        )
-    if settings.signup_mode == "invite_only":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Signups are invite-only",
         )
 
     target_email = payload.email.strip().lower()
@@ -157,6 +158,12 @@ def signup(request: Request, payload: SignupRequest, db: Session = Depends(get_d
 
         res = _build_token_response(user, db, default_ws_id)
         return JSONResponse(status_code=status.HTTP_201_CREATED, content=res.model_dump(mode="json"))
+
+    if settings.signup_mode == "invite_only":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Signups are invite-only",
+        )
 
     # Not first user
     existing_user = db.scalar(select(User).where(User.email == target_email))
@@ -265,6 +272,7 @@ def verify_email(payload: VerifyEmailRequest, db: Session = Depends(get_db)):
 @router.post("/resend-verification", status_code=status.HTTP_202_ACCEPTED)
 @limiter.limit("3/hour", key_func=client_ip)
 def resend_verification(request: Request, payload: ResendVerificationRequest, db: Session = Depends(get_db)):
+    verify_captcha(request, payload.captcha_token)
     target_email = payload.email.strip().lower()
 
     # Per-email rate limit: 1 per 60 seconds
@@ -282,6 +290,7 @@ def resend_verification(request: Request, payload: ResendVerificationRequest, db
 @router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED)
 @limiter.limit("5/hour", key_func=client_ip)
 def forgot_password(request: Request, payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    verify_captcha(request, payload.captcha_token)
     target_email = payload.email.strip().lower()
 
     # Per-email rate limit: 1 per 60 seconds

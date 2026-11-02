@@ -69,6 +69,10 @@ class Settings(BaseSettings):
     trusted_proxy_count: int = 0
     rate_limit_storage_uri: str | None = None
 
+    # Plans, Quotas & CAPTCHA (Tier 4C2)
+    quota_enabled: bool = True
+    turnstile_secret_key: str | None = None
+
     @property
     def frontend_origins(self) -> list[str]:
         return [origin.strip() for origin in self.frontend_url.split(",") if origin.strip()]

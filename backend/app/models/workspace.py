@@ -27,6 +27,12 @@ class Workspace(Base):
         index=True,
         default=lambda: secrets.token_urlsafe(32),
     )
+    plan: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="free",
+        server_default="free",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
