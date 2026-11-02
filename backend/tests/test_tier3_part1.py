@@ -50,6 +50,7 @@ def _create_test_user(db, email: str, password: str = "securepassword123", role:
         role=role,
         is_superadmin=(role == "admin"),
         is_active=is_active,
+        email_verified_at=datetime.now(timezone.utc),
     )
     db.add(user)
     db.flush()
@@ -457,7 +458,18 @@ def test_viewer_jwt_cannot_call_any_non_get_route():
                 continue
             if any(route.path.startswith(prefix) for prefix in public_prefixes):
                 continue
-            if route.path in ("/workspaces", "/workspaces/current/leave", "/auth/switch-workspace"):
+            if route.path in (
+                "/workspaces",
+                "/workspaces/current/leave",
+                "/auth/switch-workspace",
+                "/auth/signup",
+                "/auth/verify-email",
+                "/auth/resend-verification",
+                "/auth/forgot-password",
+                "/auth/reset-password",
+                "/auth/accept-invitation",
+                "/auth/change-password",
+            ):
                 continue
             path = re.sub(r"\{[^}]+\}", dummy_uuid, route.path)
             resp = client.request(method, path, headers=v_headers, json={})

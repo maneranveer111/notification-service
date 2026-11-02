@@ -8,6 +8,7 @@ from app.models.suppression import Suppression
 from app.models.user import User
 from app.models.delivery_attempt import DeliveryAttempt
 from app.models.workspace import Workspace, Membership
+from app.models.invitation import Invitation
 
 __all__ = [
     "ApiClient",
@@ -19,6 +20,7 @@ __all__ = [
     "DeliveryAttempt",
     "Workspace",
     "Membership",
+    "Invitation",
 ]
 
 _DEFAULT_WS_ID_CACHE = None

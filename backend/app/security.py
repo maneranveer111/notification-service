@@ -74,6 +74,14 @@ def get_user_principal(
                 detail="Invalid or expired token",
             )
 
+        if user.password_changed_at:
+            token_iat = payload.get("iat")
+            if token_iat is not None and token_iat < user.password_changed_at.timestamp():
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid or expired token",
+                )
+
         # Attempt to resolve workspace membership if available
         claim_ws = payload.get("ws")
         membership = None
@@ -182,6 +190,20 @@ def get_principal(
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid or expired token",
+            )
+
+        if user.password_changed_at:
+            token_iat = payload.get("iat")
+            if token_iat is not None and token_iat < user.password_changed_at.timestamp():
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid or expired token",
+                )
+
+        if settings.require_email_verification and not user.email_verified_at:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Email not verified",
             )
 
         # 1. Choose workspace: claim 'ws' -> user.last_workspace_id -> first membership

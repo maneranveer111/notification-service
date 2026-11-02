@@ -13,8 +13,10 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.api.accounts import router as accounts_router
 from app.api.admin import router as admin_router
 from app.api.auth import router as auth_router
+from app.api.invitations import router as invitations_router
 from app.api.metrics import HTTP_REQUEST_DURATION_SECONDS, HTTP_REQUESTS_TOTAL, router as metrics_router
 from app.api.notifications import router as notifications_router
 from app.api.stats import router as stats_router
@@ -117,6 +119,7 @@ async def request_id_and_metrics_middleware(request: Request, call_next):
 
 
 app.include_router(auth_router)
+app.include_router(accounts_router)
 app.include_router(notifications_router)
 app.include_router(webhooks_router)
 app.include_router(admin_router)
@@ -126,6 +129,7 @@ app.include_router(unsubscribe_router)
 app.include_router(stats_router)
 app.include_router(metrics_router)
 app.include_router(workspaces_router)
+app.include_router(invitations_router)
 
 
 @app.get("/health")

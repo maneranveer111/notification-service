@@ -233,6 +233,7 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)):
         password_hash=hash_password(payload.password),
         role=payload.role,
         is_active=True,
+        email_verified_at=datetime.now(timezone.utc),
     )
     db.add(user)
     db.commit()
@@ -297,6 +298,7 @@ def update_user(
         user.is_active = payload.is_active
     if payload.password is not None:
         user.password_hash = hash_password(payload.password)
+        user.password_changed_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(user)

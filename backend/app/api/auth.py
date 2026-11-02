@@ -48,6 +48,12 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    if settings.require_email_verification and not user.email_verified_at:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email not verified",
+        )
+
     user.last_login_at = datetime.now(timezone.utc)
     db.commit()
 

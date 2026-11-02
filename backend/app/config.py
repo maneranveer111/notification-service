@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     unsubscribe_secret: str | None = None
     webhook_channel_allowed_hosts: str = "hooks.slack.com,discord.com,discordapp.com"
 
+    signup_mode: str = "open"  # open | invite_only | closed
+    require_email_verification: bool = True
+    system_mail_backend: str = "provider"  # provider | console
+    frontend_public_url: str = "http://localhost:5173"
+
     @property
     def frontend_origins(self) -> list[str]:
         return [origin.strip() for origin in self.frontend_url.split(",") if origin.strip()]

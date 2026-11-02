@@ -2,6 +2,7 @@
 Tier 4A: Multi-tenancy tests.
 Tests workspace isolation, role enforcement, and membership management.
 """
+from datetime import datetime, timezone
 import uuid
 from unittest.mock import MagicMock, patch
 
@@ -51,6 +52,7 @@ def _make_user_with_workspace(db, email, ws_role="owner", ws_id=None):
         password_hash=hash_password("password123"),
         role="admin" if ws_role in ("owner", "admin") else "viewer",
         is_active=True,
+        email_verified_at=datetime.now(timezone.utc),
     )
     db.add(user)
     db.flush()
@@ -607,6 +609,7 @@ def test_user_without_membership_gets_403_on_tenant_routes(db):
         password_hash=hash_password("password"),
         role="viewer",
         is_active=True,
+        email_verified_at=datetime.now(timezone.utc),
     )
     db.add(user_no_ws)
     db.commit()
@@ -623,6 +626,7 @@ def test_user_without_membership_can_access_me(db):
         password_hash=hash_password("password"),
         role="viewer",
         is_active=True,
+        email_verified_at=datetime.now(timezone.utc),
     )
     db.add(user_no_ws)
     db.commit()

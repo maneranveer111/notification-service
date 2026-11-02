@@ -7,6 +7,7 @@ from pathlib import Path
 backend_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(backend_dir))
 
+from datetime import datetime, timezone
 from sqlalchemy import select
 from app.database import SessionLocal
 from app.models.user import User
@@ -61,6 +62,7 @@ def main():
             role=role,
             is_superadmin=args.superadmin,
             is_active=True,
+            email_verified_at=datetime.now(timezone.utc),
         )
         db.add(user)
         db.flush()
