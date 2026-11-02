@@ -7,7 +7,7 @@ import Loading from '../../components/Loading';
 import EmptyState from '../../components/EmptyState';
 import Pagination from '../../components/Pagination';
 
-const REASON_OPTIONS = ['opt_out', 'bounce', 'complaint', 'manual'];
+const REASON_OPTIONS = ['opt_out', 'bounce'];
 
 export default function SuppressionsPage() {
   const { isAdmin } = useAuth();

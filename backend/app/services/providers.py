@@ -97,125 +97,154 @@ def resolve_email_providers(
 ) -> list[tuple[str, BrevoConfig | SmtpConfig]]:
     """
     Resolve ordered list of (name, config) for email sending.
-    If workspace.use_platform_providers is True (or workspace is None), use platform settings.
-    Otherwise, decrypt active workspace credentials in settings.email_provider_order.
+    Own workspace credentials always win over use_platform_providers.
+    1. If workspace has own active brevo/smtp credentials, use them.
+    2. Else if workspace is None or use_platform_providers is True, use platform settings.
+    3. Else return empty list.
     """
+    # Step 1: own active credentials always take precedence
+    if workspace is not None:
+        creds = db.execute(
+            select(ProviderCredential).where(
+                ProviderCredential.workspace_id == workspace.id,
+                ProviderCredential.provider.in_(["brevo", "smtp"]),
+                ProviderCredential.is_active == True,
+            )
+        ).scalars().all()
+
+        if creds:
+            settings = get_settings()
+            raw_order = settings.email_provider_order.split(",")
+            order = [p.strip().lower() for p in raw_order if p.strip()]
+
+            cred_by_provider = {c.provider: c for c in creds}
+            providers: list[tuple[str, BrevoConfig | SmtpConfig]] = []
+
+            for name in order:
+                cred = cred_by_provider.get(name)
+                if not cred:
+                    continue
+                try:
+                    data = decrypt_json(cred.config_encrypted)
+                except Exception:
+                    continue
+
+                if name == "brevo":
+                    providers.append(
+                        (
+                            "brevo",
+                            BrevoConfig(
+                                api_key=data["api_key"],
+                                from_email=data["from_email"],
+                                from_name=data.get("from_name"),
+                            ),
+                        )
+                    )
+                elif name == "smtp":
+                    providers.append(
+                        (
+                            "smtp",
+                            SmtpConfig(
+                                host=data["host"],
+                                port=int(data["port"]),
+                                username=data["username"],
+                                password=data["password"],
+                                from_email=data["from_email"],
+                                use_tls=data.get("use_tls", True),
+                                is_platform=False,
+                            ),
+                        )
+                    )
+
+            return providers
+
+    # Step 2: platform fallback if allowed
     if workspace is None or workspace.use_platform_providers:
         return get_platform_email_providers()
 
-    settings = get_settings()
-    raw_order = settings.email_provider_order.split(",")
-    order = [p.strip().lower() for p in raw_order if p.strip()]
-
-    creds = db.execute(
-        select(ProviderCredential).where(
-            ProviderCredential.workspace_id == workspace.id,
-            ProviderCredential.provider.in_(["brevo", "smtp"]),
-            ProviderCredential.is_active == True,
-        )
-    ).scalars().all()
-
-    cred_by_provider = {c.provider: c for c in creds}
-    providers: list[tuple[str, BrevoConfig | SmtpConfig]] = []
-
-    for name in order:
-        cred = cred_by_provider.get(name)
-        if not cred:
-            continue
-        try:
-            data = decrypt_json(cred.config_encrypted)
-        except Exception:
-            continue
-
-        if name == "brevo":
-            providers.append(
-                (
-                    "brevo",
-                    BrevoConfig(
-                        api_key=data["api_key"],
-                        from_email=data["from_email"],
-                        from_name=data.get("from_name"),
-                    ),
-                )
-            )
-        elif name == "smtp":
-            providers.append(
-                (
-                    "smtp",
-                    SmtpConfig(
-                        host=data["host"],
-                        port=int(data["port"]),
-                        username=data["username"],
-                        password=data["password"],
-                        from_email=data["from_email"],
-                        use_tls=data.get("use_tls", True),
-                        is_platform=False,
-                    ),
-                )
-            )
-
-    return providers
+    # Step 3: no provider
+    return []
 
 
 def resolve_sms_provider(db: Session, workspace: Workspace | None) -> TwilioConfig | None:
     """
     Resolve TwilioConfig for SMS sending.
-    If workspace.use_platform_providers is True (or workspace is None), use platform settings.
-    Otherwise, decrypt active workspace Twilio credentials.
+    Own workspace credentials always win over use_platform_providers.
+    1. If workspace has own active Twilio credential, use it.
+    2. Else if workspace is None or use_platform_providers is True, use platform settings.
+    3. Else return None.
     """
+    # Step 1: own active credential always takes precedence
+    if workspace is not None:
+        cred = db.execute(
+            select(ProviderCredential).where(
+                ProviderCredential.workspace_id == workspace.id,
+                ProviderCredential.provider == "twilio",
+                ProviderCredential.is_active == True,
+            )
+        ).scalar_one_or_none()
+
+        if cred:
+            try:
+                data = decrypt_json(cred.config_encrypted)
+            except Exception:
+                return None
+
+            settings = get_settings()
+            callback = f"{settings.public_base_url}/webhooks/twilio/{workspace.webhook_token}"
+            return TwilioConfig(
+                account_sid=data["account_sid"],
+                auth_token=data["auth_token"],
+                from_number=data["from_number"],
+                status_callback=callback,
+            )
+
+    # Step 2: platform fallback if allowed
     if workspace is None or workspace.use_platform_providers:
         return get_platform_sms_provider()
 
-    settings = get_settings()
-    cred = db.execute(
-        select(ProviderCredential).where(
-            ProviderCredential.workspace_id == workspace.id,
-            ProviderCredential.provider == "twilio",
-            ProviderCredential.is_active == True,
-        )
-    ).scalar_one_or_none()
-
-    if not cred:
-        return None
-
-    try:
-        data = decrypt_json(cred.config_encrypted)
-    except Exception:
-        return None
-
-    callback = f"{settings.public_base_url}/webhooks/twilio/{workspace.webhook_token}"
-    return TwilioConfig(
-        account_sid=data["account_sid"],
-        auth_token=data["auth_token"],
-        from_number=data["from_number"],
-        status_callback=callback,
-    )
+    # Step 3: no provider
+    return None
 
 
 def has_email_provider(db: Session, workspace: Workspace | None) -> bool:
+    # Step 1: own active credentials always take precedence
+    if workspace is not None:
+        count = db.scalar(
+            select(ProviderCredential.id).where(
+                ProviderCredential.workspace_id == workspace.id,
+                ProviderCredential.provider.in_(["brevo", "smtp"]),
+                ProviderCredential.is_active == True,
+            ).limit(1)
+        )
+        if count is not None:
+            return True
+
+    # Step 2: platform fallback if allowed
     if workspace is None or workspace.use_platform_providers:
         return len(get_platform_email_providers()) > 0
 
-    count = db.scalar(
-        select(ProviderCredential.id).where(
-            ProviderCredential.workspace_id == workspace.id,
-            ProviderCredential.provider.in_(["brevo", "smtp"]),
-            ProviderCredential.is_active == True,
-        ).limit(1)
-    )
-    return count is not None
+    # Step 3: no provider
+    return False
 
 
 def has_sms_provider(db: Session, workspace: Workspace | None) -> bool:
+    # Step 1: own active credential always takes precedence
+    if workspace is not None:
+        count = db.scalar(
+            select(ProviderCredential.id).where(
+                ProviderCredential.workspace_id == workspace.id,
+                ProviderCredential.provider == "twilio",
+                ProviderCredential.is_active == True,
+            ).limit(1)
+        )
+        if count is not None:
+            return True
+
+    # Step 2: platform fallback if allowed
     if workspace is None or workspace.use_platform_providers:
         return get_platform_sms_provider() is not None
 
-    count = db.scalar(
-        select(ProviderCredential.id).where(
-            ProviderCredential.workspace_id == workspace.id,
-            ProviderCredential.provider == "twilio",
-            ProviderCredential.is_active == True,
-        ).limit(1)
-    )
-    return count is not None
+    # Step 3: no provider
+    return False
 
