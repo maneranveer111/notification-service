@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { apiFetch } from '../../lib/api';
+import { apiFetch, absoluteApiBase } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { describeError } from '../../lib/errors';
 import ConfirmDialog from '../../components/ConfirmDialog';
@@ -7,7 +7,6 @@ import ErrorBanner from '../../components/ErrorBanner';
 import Loading from '../../components/Loading';
 import EmptyState from '../../components/EmptyState';
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '');
 
 function OneTimeKeyDialog({ apiKey, onClose }) {
   const [copied, setCopied] = useState(false);
@@ -195,18 +194,19 @@ function UsageModal({ clientId, onClose }) {
   );
 }
 
-const curlExample = `curl -X POST ${API_BASE}/notifications/email \\
+function HowToUseBox() {
+  const API_BASE = absoluteApiBase();
+  const curlExample = `curl -X POST ${API_BASE}/notifications/email \\
   -H "X-API-Key: <your-key>" \\
   -H "Content-Type: application/json" \\
   -d '{"recipient":"user@example.com","subject":"Hello","body":"World"}'`;
 
-const templateExample = `curl -X POST ${API_BASE}/notifications/email \\
+  const templateExample = `curl -X POST ${API_BASE}/notifications/email \\
   -H "X-API-Key: <your-key>" \\
   -H "Content-Type: application/json" \\
   -H "Idempotency-Key: unique-request-id" \\
   -d '{"recipient":"user@example.com","template_id":"tmpl_xxx","variables":{"name":"Alice"}}'`;
 
-function HowToUseBox() {
   const [copiedCurl, setCopiedCurl] = useState(false);
   const [copiedTemplate, setCopiedTemplate] = useState(false);
 

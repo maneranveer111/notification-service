@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import { usePolling } from '../lib/usePolling';
-import { getStatsOverview, getStatsTimeseries, apiFetch, apiFetchWithCount } from '../lib/api';
+import { getStatsOverview, getStatsTimeseries, apiFetch, apiFetchWithCount, absoluteApiBase } from '../lib/api';
 import { POLL_INTERVAL_MS } from '../lib/constants';
 import { useAuth } from '../lib/auth';
 import ErrorBanner from '../components/ErrorBanner';
@@ -106,7 +106,7 @@ export default function OverviewPage() {
   const allDone = checks.provider && checks.notification && checks.apiKey;
   const completedCount = Object.values(checks).filter(Boolean).length;
 
-  const apiBase = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '');
+  const apiBase = absoluteApiBase();
   const curlExample = `curl -X POST ${apiBase}/notifications/email \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\

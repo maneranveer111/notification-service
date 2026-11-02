@@ -1,5 +1,12 @@
-// Base URL — strip trailing slash so paths can always start with /
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '');
+// ---------------------------------------------------------------------------
+// Runtime config helper — reads window.__APP_CONFIG__ first so the base URL
+// can be overridden at deploy time without rebuilding the bundle.
+// ---------------------------------------------------------------------------
+export function absoluteApiBase() {
+  return (window.__APP_CONFIG__?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '');
+}
+
+function _base() { return absoluteApiBase(); }
 
 // ---------------------------------------------------------------------------
 // ApiError
@@ -51,7 +58,7 @@ export async function apiFetch(path, options = {}) {
   const token = sessionStorage.getItem('token');
   const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  const url = `${BASE_URL}${path}`;
+  const url = `${_base()}${path}`;
 
   let response;
   try {
@@ -126,7 +133,7 @@ async function request(path, options = {}) {
   const token = sessionStorage.getItem('token');
   const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  const url = `${BASE_URL}${path}`;
+  const url = `${_base()}${path}`;
 
   let res;
   try {
