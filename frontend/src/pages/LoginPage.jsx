@@ -5,6 +5,27 @@ import { getPublicConfig, apiFetch, ApiError } from '../lib/api';
 import { describeError } from '../lib/errors';
 import Captcha from '../components/Captcha';
 
+/**
+ * Returns the redirect destination only when it is a safe same-origin path:
+ *   - must start with exactly one "/"
+ *   - must NOT start with "//" (protocol-relative URL)
+ *   - must NOT contain "://" (absolute URL with scheme)
+ *   - must NOT start with "/\" (IE-era bypass: /\evil.com)
+ * Falls back to "/" for anything that doesn't pass.
+ */
+function getSafeRedirect(searchParams) {
+  const dest = searchParams.get('redirect') || searchParams.get('next') || '';
+  if (
+    dest.startsWith('/') &&
+    !dest.startsWith('//') &&
+    !dest.startsWith('/\\') &&
+    !dest.includes('://')
+  ) {
+    return dest;
+  }
+  return '/';
+}
+
 export default function LoginPage() {
   const { user, loading: authLoading, login } = useAuth();
   const navigate = useNavigate();
@@ -33,7 +54,7 @@ export default function LoginPage() {
   // Redirect if already logged in
   useEffect(() => {
     if (!authLoading && user) {
-      navigate(searchParams.get('redirect') || searchParams.get('next') || '/', { replace: true });
+      navigate(getSafeRedirect(searchParams), { replace: true });
     }
   }, [user, authLoading, navigate, searchParams]);
 
@@ -62,7 +83,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
-      navigate(searchParams.get('redirect') || searchParams.get('next') || '/', { replace: true });
+      navigate(getSafeRedirect(searchParams), { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 401) {
