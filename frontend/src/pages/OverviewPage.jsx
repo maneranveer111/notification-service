@@ -1,11 +1,12 @@
-import { useState, useCallback } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useState, useCallback, useEffect } from 'react';
+import { useLocation, Link } from 'react-router-dom';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import { usePolling } from '../lib/usePolling';
-import { getStatsOverview, getStatsTimeseries } from '../lib/api';
+import { getStatsOverview, getStatsTimeseries, apiFetch, apiFetchWithCount } from '../lib/api';
 import { POLL_INTERVAL_MS } from '../lib/constants';
+import { useAuth } from '../lib/auth';
 import ErrorBanner from '../components/ErrorBanner';
 import Loading from '../components/Loading';
 
@@ -39,6 +40,67 @@ export default function OverviewPage() {
   const flash = location.state?.flash;
   const [winIdx, setWinIdx] = useState(1);
   const win = WINDOWS[winIdx];
+
+  // ── Onboarding checklist ─────────────────────────────────────────────────
+  const { workspace, isAdmin } = useAuth();
+  const dismissedKey = `onboarding_dismissed:${workspace?.id}`;
+  const [dismissed, setDismissed] = useState(() => localStorage.getItem(dismissedKey) === '1');
+  const [checks, setChecks] = useState({ provider: false, notification: false, apiKey: false });
+  const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!isAdmin || dismissed) return;
+    Promise.allSettled([
+      apiFetch('/providers').then((d) => d.length > 0),
+      apiFetchWithCount('/notifications?limit=1').then(({ total }) => total > 0),
+      apiFetch('/admin/clients').then((d) => d.length > 0),
+    ]).then(([p, n, a]) => {
+      setChecks({
+        provider: p.status === 'fulfilled' && p.value,
+        notification: n.status === 'fulfilled' && n.value,
+        apiKey: a.status === 'fulfilled' && a.value,
+      });
+    });
+  }, [workspace?.id, isAdmin, dismissed]);
+
+  const allDone = checks.provider && checks.notification && checks.apiKey;
+  const completedCount = Object.values(checks).filter(Boolean).length;
+
+  const apiBase = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '');
+  const curlExample = `curl -X POST ${apiBase}/notifications/email \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"recipient":"user@example.com","subject":"Hello","body":"World"}'`;
+
+  function handleCopy() {
+    navigator.clipboard.writeText(curlExample).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  const STEPS = [
+    {
+      label: 'Connect an email provider',
+      done: checks.provider,
+      link: '/settings/providers',
+      linkLabel: 'Go to Providers',
+    },
+    {
+      label: 'Send a test email',
+      done: checks.notification,
+      link: '/send',
+      linkLabel: 'Send a notification',
+    },
+    {
+      label: 'Create an API key',
+      done: checks.apiKey,
+      link: '/settings/api-keys',
+      linkLabel: 'Go to API Keys',
+    },
+  ];
+  // ── End onboarding checklist ─────────────────────────────────────────────
 
   const fetchOverview = useCallback(() => getStatsOverview(win.hours), [win.hours]);
   const fetchTimeseries = useCallback(
@@ -104,6 +166,89 @@ export default function OverviewPage() {
       {flash && (
         <div className="px-4 py-3 rounded-lg bg-amber-900/30 border border-amber-700 text-amber-300 text-sm flex items-center justify-between">
           <span>⚠ {flash}</span>
+        </div>
+      )}
+
+      {/* Onboarding checklist */}
+      {isAdmin && !dismissed && !allDone && (
+        <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6 text-gray-900">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-semibold">Get started with Notify</h2>
+            <button
+              type="button"
+              onClick={() => { localStorage.setItem(dismissedKey, '1'); setDismissed(true); }}
+              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              Dismiss
+            </button>
+          </div>
+          {/* Progress bar */}
+          <div className="h-2 rounded-full bg-gray-200 mb-5 overflow-hidden">
+            <div
+              className="h-2 rounded-full bg-indigo-500 transition-all"
+              style={{ width: `${(completedCount / 3) * 100}%` }}
+            />
+          </div>
+          <ul className="space-y-3">
+            {STEPS.map((step) => (
+              <li key={step.label} className="flex items-center gap-3">
+                <span
+                  className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
+                    step.done
+                      ? 'bg-indigo-500 text-white'
+                      : 'bg-gray-200 text-gray-400'
+                  }`}
+                >
+                  {step.done ? '✓' : ''}
+                </span>
+                <span className={`flex-1 text-sm ${step.done ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                  {step.label}
+                </span>
+                {!step.done && (
+                  <Link
+                    to={step.link}
+                    className="text-xs text-indigo-600 hover:text-indigo-800 font-medium shrink-0"
+                  >
+                    {step.linkLabel} →
+                  </Link>
+                )}
+              </li>
+            ))}
+            {/* Step 4: Make your first API call */}
+            <li className="flex items-start gap-3">
+              <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-200 text-gray-400 mt-0.5">
+              </span>
+              <div className="flex-1">
+                <button
+                  type="button"
+                  onClick={() => setExpanded((v) => !v)}
+                  className="text-sm text-gray-800 flex items-center gap-1 hover:text-indigo-700 transition-colors"
+                >
+                  Make your first API call
+                  <svg
+                    className={`w-3.5 h-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`}
+                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {expanded && (
+                  <div className="mt-2 relative">
+                    <pre className="bg-gray-900 text-green-300 text-xs rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all">
+                      {curlExample}
+                    </pre>
+                    <button
+                      type="button"
+                      onClick={handleCopy}
+                      className="absolute top-2 right-2 px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-200 text-xs transition-colors"
+                    >
+                      {copied ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </li>
+          </ul>
         </div>
       )}
 

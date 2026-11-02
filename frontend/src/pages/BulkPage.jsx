@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { sendBulk, getBatchStatus, listTemplates } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { parseRecipientsData } from '../lib/csv';
+import { describeError } from '../lib/errors';
 import StatusBadge from '../components/StatusBadge';
 import ErrorBanner from '../components/ErrorBanner';
 
@@ -32,6 +33,7 @@ export default function BulkPage() {
   // Submission & Batch polling
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [errorAction, setErrorAction] = useState(null);
   const [batchInfo, setBatchInfo] = useState(null); // { batch_id, queued, suppressed, ids }
   const [batchStatus, setBatchStatus] = useState(null); // { batch_id, total, counts_by_status }
   const pollTimerRef = useRef(null);
@@ -151,6 +153,7 @@ export default function BulkPage() {
 
     setLoading(true);
     setError(null);
+    setErrorAction(null);
     setBatchInfo(null);
     setBatchStatus(null);
 
@@ -182,7 +185,11 @@ export default function BulkPage() {
       setScheduledAtRaw('');
       setIsScheduled(false);
     } catch (err) {
-      setError(err);
+      const desc = describeError(err);
+      setError(desc.title + ': ' + desc.message);
+      if (desc.action) {
+        setErrorAction(desc.action);
+      }
     } finally {
       setLoading(false);
     }
@@ -194,7 +201,19 @@ export default function BulkPage() {
         <h1 className="text-xl font-bold">Bulk Notifications</h1>
       </div>
 
-      {error && <ErrorBanner error={error} />}
+      {error && (
+        <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-lg bg-red-900/30 border border-red-700 text-red-300 text-sm">
+          <span>⚠ {typeof error === 'string' ? error : error?.message || String(error)}</span>
+          {errorAction && (
+            <Link
+              to={errorAction.to}
+              className="shrink-0 px-3 py-1 rounded bg-red-800 hover:bg-red-700 text-red-100 text-xs font-medium"
+            >
+              {errorAction.label}
+            </Link>
+          )}
+        </div>
+      )}
 
       {/* Batch Summary Card */}
       {batchInfo && (
