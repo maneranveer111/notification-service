@@ -1,17 +1,108 @@
+// Base URL — strip trailing slash so paths can always start with /
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '');
 
+// ---------------------------------------------------------------------------
+// ApiError
+// ---------------------------------------------------------------------------
 export class ApiError extends Error {
-  constructor(status, message, detail) {
+  constructor(message, status, body) {
     super(message);
     this.status = status;
-    this.detail = detail;
+    this.code = body?.code ?? null;
+    this.detail = body?.detail ?? null;
   }
 }
 
-function getToken() {
-  return sessionStorage.getItem('token');
+// ---------------------------------------------------------------------------
+// Module-level config cache
+// ---------------------------------------------------------------------------
+let _configCache = null;
+
+// ---------------------------------------------------------------------------
+// Auth-exempt paths — no auto-logout on 401
+// ---------------------------------------------------------------------------
+const AUTH_EXEMPT = [
+  'login',
+  'signup',
+  'verify-email',
+  'resend-verification',
+  'forgot-password',
+  'reset-password',
+  'accept-invitation',
+];
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+function _autoLogout() {
+  sessionStorage.removeItem('token');
+  sessionStorage.removeItem('user');
+  sessionStorage.removeItem('workspace');
+  sessionStorage.removeItem('workspaces');
+  sessionStorage.removeItem('isSuperadmin');
+  window.location = '/login';
 }
 
+// ---------------------------------------------------------------------------
+// Core fetch wrapper
+// ---------------------------------------------------------------------------
+export async function apiFetch(path, options = {}) {
+  const { _raw, ...opts } = options;
+  const token = sessionStorage.getItem('token');
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const url = `${BASE_URL}${path}`;
+
+  let response;
+  try {
+    response = await fetch(url, { ...opts, headers });
+  } catch (e) {
+    throw new ApiError('Network error', null, null);
+  }
+
+  if (response.status === 401) {
+    const exempt = AUTH_EXEMPT.some(p => path.includes(p));
+    if (!exempt) {
+      _autoLogout();
+      throw new ApiError('Unauthorized', 401, null);
+    }
+  }
+
+  let body = null;
+  try { body = await response.json(); } catch (_) {}
+
+  if (!response.ok) {
+    const msg = body?.detail
+      ? (Array.isArray(body.detail) ? JSON.stringify(body.detail) : body.detail)
+      : response.statusText;
+    throw new ApiError(msg, response.status, body);
+  }
+
+  if (_raw) return { data: body, response };
+  return body;
+}
+
+// ---------------------------------------------------------------------------
+// Fetch wrapper that also returns X-Total-Count
+// ---------------------------------------------------------------------------
+export async function apiFetchWithCount(path, options = {}) {
+  const { data, response } = await apiFetch(path, { ...options, _raw: true });
+  const total = parseInt(response.headers.get('X-Total-Count') || '0', 10);
+  return { data, total };
+}
+
+// ---------------------------------------------------------------------------
+// Public config (cached)
+// ---------------------------------------------------------------------------
+export async function getPublicConfig() {
+  if (_configCache) return _configCache;
+  _configCache = await apiFetch('/public/config');
+  return _configCache;
+}
+
+// ---------------------------------------------------------------------------
+// Legacy helpers (kept for backward compatibility)
+// ---------------------------------------------------------------------------
 function formatDetail(detail) {
   if (!detail) return null;
   if (typeof detail === 'string') return detail;
@@ -26,31 +117,46 @@ function formatDetail(detail) {
   return String(detail);
 }
 
+/**
+ * Internal legacy request helper — wraps apiFetch and returns the raw Response
+ * so that the existing callers that do `res.json()` or `res.headers.get(...)` continue to work.
+ */
 async function request(path, options = {}) {
-  const token = getToken();
-  const headers = { 'Content-Type': 'application/json', ...options.headers };
+  const { _raw, ...opts } = options;
+  const token = sessionStorage.getItem('token');
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
   if (token) headers['Authorization'] = `Bearer ${token}`;
+  const url = `${BASE_URL}${path}`;
 
-  const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+  let res;
+  try {
+    res = await fetch(url, { ...opts, headers });
+  } catch (e) {
+    throw new ApiError('Network error', null, null);
+  }
 
-  if (res.status === 401 && path !== '/auth/login') {
-    sessionStorage.removeItem('token');
-    sessionStorage.removeItem('user');
-    window.location.replace('/login');
-    throw new ApiError(401, 'Session expired', null);
+  if (res.status === 401) {
+    const exempt = AUTH_EXEMPT.some(p => path.includes(p));
+    if (!exempt) {
+      _autoLogout();
+      throw new ApiError('Unauthorized', 401, null);
+    }
   }
 
   if (!res.ok) {
     let body = null;
-    try { body = await res.json(); } catch (_) {}
+    try { body = await res.clone().json(); } catch (_) {}
     const detail = body?.detail;
     const message = formatDetail(detail) || body?.message || res.statusText;
-    throw new ApiError(res.status, message, detail);
+    throw new ApiError(message, res.status, body);
   }
 
   return res;
 }
 
+// ---------------------------------------------------------------------------
+// Auth
+// ---------------------------------------------------------------------------
 export async function login(email, password) {
   const res = await request('/auth/login', {
     method: 'POST',
@@ -64,6 +170,9 @@ export async function getMe() {
   return res.json();
 }
 
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
 export async function listNotifications(params = {}) {
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
@@ -95,6 +204,9 @@ export async function cancelNotification(id) {
   return res.json();
 }
 
+// ---------------------------------------------------------------------------
+// Stats
+// ---------------------------------------------------------------------------
 export async function getStatsOverview(windowHours = 24) {
   const res = await request(`/stats/overview?window_hours=${windowHours}`);
   return res.json();
@@ -105,47 +217,34 @@ export async function getStatsTimeseries(windowHours = 24, bucketHours = 1) {
   return res.json();
 }
 
+// ---------------------------------------------------------------------------
+// Send helpers
+// ---------------------------------------------------------------------------
 export async function sendEmail(payload, idempotencyKey = null) {
   const headers = {};
   if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
-  const res = await request('/notifications/email', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(payload),
-  });
+  const res = await request('/notifications/email', { method: 'POST', headers, body: JSON.stringify(payload) });
   return res.json();
 }
 
 export async function sendSMS(payload, idempotencyKey = null) {
   const headers = {};
   if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
-  const res = await request('/notifications/sms', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(payload),
-  });
+  const res = await request('/notifications/sms', { method: 'POST', headers, body: JSON.stringify(payload) });
   return res.json();
 }
 
 export async function sendWebhook(payload, idempotencyKey = null) {
   const headers = {};
   if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
-  const res = await request('/notifications/webhook', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(payload),
-  });
+  const res = await request('/notifications/webhook', { method: 'POST', headers, body: JSON.stringify(payload) });
   return res.json();
 }
 
 export async function sendBulk(payload, idempotencyKey = null) {
   const headers = {};
   if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
-  const res = await request('/notifications/bulk', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(payload),
-  });
+  const res = await request('/notifications/bulk', { method: 'POST', headers, body: JSON.stringify(payload) });
   return res.json();
 }
 
@@ -154,6 +253,9 @@ export async function getBatchStatus(batchId) {
   return res.json();
 }
 
+// ---------------------------------------------------------------------------
+// Templates
+// ---------------------------------------------------------------------------
 export async function listTemplates(params = {}) {
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
@@ -171,24 +273,16 @@ export async function getTemplate(id) {
 }
 
 export async function createTemplate(payload) {
-  const res = await request('/templates', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+  const res = await request('/templates', { method: 'POST', body: JSON.stringify(payload) });
   return res.json();
 }
 
 export async function updateTemplate(id, payload) {
-  const res = await request(`/templates/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(payload),
-  });
+  const res = await request(`/templates/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
   return res.json();
 }
 
 export async function deleteTemplate(id) {
-  await request(`/templates/${id}`, {
-    method: 'DELETE',
-  });
+  await request(`/templates/${id}`, { method: 'DELETE' });
   return true;
 }
