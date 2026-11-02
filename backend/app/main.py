@@ -14,6 +14,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.api.accounts import router as accounts_router
+from app.api.public import router as public_router
 from app.api.admin import router as admin_router
 from app.api.auth import router as auth_router
 from app.api.invitations import router as invitations_router
@@ -141,6 +142,7 @@ async def request_id_and_metrics_middleware(request: Request, call_next):
 
 app.include_router(auth_router)
 app.include_router(accounts_router)
+app.include_router(public_router)
 app.include_router(notifications_router)
 app.include_router(webhooks_router)
 app.include_router(admin_router)

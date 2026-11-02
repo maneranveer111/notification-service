@@ -72,6 +72,7 @@ class Settings(BaseSettings):
     # Plans, Quotas & CAPTCHA (Tier 4C2)
     quota_enabled: bool = True
     turnstile_secret_key: str | None = None
+    turnstile_site_key: str | None = None
 
     @property
     def frontend_origins(self) -> list[str]:

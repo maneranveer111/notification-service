@@ -196,23 +196,27 @@ def send_email(
         except TransientError as exc:
             error_msg = str(exc)
             last_error = exc
-            logger.warning("Transient error with provider %s: %s. Attempting failover.", provider_name, exc)
+            http_status = getattr(getattr(exc, 'response', None), 'status_code', None)
+            logger.warning("Transient error with provider %s: %s%s. Attempting failover.", provider_name, type(exc).__name__, f" HTTP {http_status}" if http_status else "")
             continue
 
         except PermanentError as exc:
             error_msg = str(exc)
             last_error = exc
             if exc.failover:
-                logger.warning("Failover-enabled permanent error with %s: %s. Failing over.", provider_name, exc)
+                http_status = getattr(getattr(exc, 'response', None), 'status_code', None)
+                logger.warning("Failover-enabled permanent error with %s: %s%s. Failing over.", provider_name, type(exc).__name__, f" HTTP {http_status}" if http_status else "")
                 continue
             else:
-                logger.error("Permanent error with provider %s: %s. Aborting.", provider_name, exc)
+                http_status = getattr(getattr(exc, 'response', None), 'status_code', None)
+                logger.warning("Permanent error with provider %s: %s%s. Aborting.", provider_name, type(exc).__name__, f" HTTP {http_status}" if http_status else "")
                 raise
 
         except Exception as exc:
             error_msg = str(exc)
             last_error = exc
-            logger.warning("Unexpected error with provider %s: %s. Attempting failover.", provider_name, exc)
+            http_status = getattr(getattr(exc, 'response', None), 'status_code', None)
+            logger.warning("Unexpected error with provider %s: %s%s. Attempting failover.", provider_name, type(exc).__name__, f" HTTP {http_status}" if http_status else "")
             continue
 
         finally:
@@ -221,7 +225,8 @@ def send_email(
                 try:
                     on_attempt(provider_name, status, error_msg, attempt_duration_ms, attempted_at)
                 except Exception as log_exc:
-                    logger.warning("Failed to record delivery attempt: %s", log_exc)
+                    status = getattr(getattr(log_exc, 'response', None), 'status_code', None)
+                    logger.warning("Failed to record delivery attempt: %s%s", type(log_exc).__name__, f" HTTP {status}" if status else "")
 
     if last_error:
         raise last_error

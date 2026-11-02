@@ -358,7 +358,7 @@ def test_provider(
             detail="Encryption is not configured on this server",
         )
     except Exception as e:
-        return {"ok": False, "error": f"Failed to decrypt credentials: {e}"}
+        return {"ok": False, "error": "Credential decryption failed"}
 
     secrets_to_sanitize: list[str] = []
     test_ok = False
