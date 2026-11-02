@@ -1,3 +1,4 @@
 backup_before_tier4.sql
 backup_before_tier4b.sql
 backup_before_tier4c1.sql
+*.sql
