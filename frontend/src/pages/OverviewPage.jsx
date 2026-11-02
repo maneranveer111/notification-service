@@ -10,6 +10,45 @@ import { useAuth } from '../lib/auth';
 import ErrorBanner from '../components/ErrorBanner';
 import Loading from '../components/Loading';
 
+function DailyUsageCard({ usageData }) {
+  if (!usageData) return null;
+  const daily = usageData.daily;
+  if (!daily) return null;
+
+  const used = daily.used ?? 0;
+  const limit = daily.limit ?? null;
+  const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  const barColor =
+    limit === null ? 'bg-green-500' :
+    pct >= 100 ? 'bg-red-500' :
+    pct >= 80 ? 'bg-amber-500' : 'bg-green-500';
+
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-sm font-medium text-gray-300">Daily Sends</p>
+        <Link to="/settings/general" className="text-xs text-blue-400 hover:text-blue-300">
+          View all usage →
+        </Link>
+      </div>
+      <div className="flex items-center justify-between text-xs text-gray-400 mb-1.5">
+        <span>{used} used</span>
+        <span>{limit === null ? <span className="text-green-400 font-medium">Unlimited</span> : `of ${limit}`}</span>
+      </div>
+      <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+        {limit !== null && (
+          <div className={`h-2 rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
+        )}
+      </div>
+      {daily.resets_at && (
+        <p className="text-xs text-gray-500 mt-1">
+          Resets {new Date(daily.resets_at).toLocaleString()}
+        </p>
+      )}
+    </div>
+  );
+}
+
 const WINDOWS = [
   { label: '6 h', hours: 6, bucketHours: 1 },
   { label: '24 h', hours: 24, bucketHours: 1 },
@@ -108,6 +147,12 @@ export default function OverviewPage() {
     [win.hours, win.bucketHours],
   );
 
+  // Compact daily usage card data (fetch once on mount)
+  const [usageData, setUsageData] = useState(null);
+  useEffect(() => {
+    apiFetch('/usage').then((d) => setUsageData(d)).catch(() => {});
+  }, []);
+
   const { data: stats, error: statsErr, loading: statsLoading, refresh: refreshStats, lastUpdated } =
     usePolling(fetchOverview, { intervalMs: POLL_INTERVAL_MS });
   const { data: series, error: seriesErr, refresh: refreshSeries } =
@@ -168,6 +213,9 @@ export default function OverviewPage() {
           <span>⚠ {flash}</span>
         </div>
       )}
+
+      {/* Daily usage compact card */}
+      <DailyUsageCard usageData={usageData} />
 
       {/* Onboarding checklist */}
       {isAdmin && !dismissed && !allDone && (

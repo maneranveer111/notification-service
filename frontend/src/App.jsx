@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { RequireAuth } from './lib/auth';
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
@@ -14,6 +14,14 @@ import TemplatesPage from './pages/TemplatesPage';
 import SendPage from './pages/SendPage';
 import BulkPage from './pages/BulkPage';
 import NotFoundPage from './pages/NotFoundPage';
+import SettingsLayout from './pages/settings/SettingsLayout';
+import GeneralPage from './pages/settings/GeneralPage';
+import ProvidersPage from './pages/settings/ProvidersPage';
+import ApiKeysPage from './pages/settings/ApiKeysPage';
+import TeamPage from './pages/settings/TeamPage';
+import SuppressionsPage from './pages/settings/SuppressionsPage';
+import AccountPage from './pages/settings/AccountPage';
+import PlatformPage from './pages/PlatformPage';
 
 export default function App() {
   return (
@@ -80,6 +88,34 @@ export default function App() {
           <RequireAuth requireWrite>
             <Layout>
               <BulkPage />
+            </Layout>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <RequireAuth>
+            <Layout>
+              <SettingsLayout />
+            </Layout>
+          </RequireAuth>
+        }
+      >
+        <Route index element={<Navigate to="/settings/general" replace />} />
+        <Route path="general" element={<GeneralPage />} />
+        <Route path="providers" element={<ProvidersPage />} />
+        <Route path="api-keys" element={<ApiKeysPage />} />
+        <Route path="team" element={<TeamPage />} />
+        <Route path="suppressions" element={<SuppressionsPage />} />
+        <Route path="account" element={<AccountPage />} />
+      </Route>
+      <Route
+        path="/platform"
+        element={
+          <RequireAuth>
+            <Layout>
+              <PlatformPage />
             </Layout>
           </RequireAuth>
         }

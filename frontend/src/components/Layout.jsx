@@ -10,6 +10,8 @@ const NAV = [
   { to: '/templates', label: 'Templates', exact: false },
   { to: '/send', label: 'Send', exact: false, adminOnly: true },
   { to: '/bulk', label: 'Bulk', exact: false, adminOnly: true },
+  { to: '/settings', label: 'Settings', exact: false },
+  { to: '/platform', label: 'Platform', exact: false, superadminOnly: true },
 ];
 
 function NavItem({ to, label, exact, onClick }) {
@@ -45,7 +47,7 @@ function RoleBadge({ role }) {
 }
 
 export default function Layout({ children }) {
-  const { user, logout, isAdmin, workspace, workspaces, switchWorkspace } = useAuth();
+  const { user, logout, isAdmin, isSuperadmin, workspace, workspaces, switchWorkspace } = useAuth();
   const [open, setOpen] = useState(false);
 
   // Workspace switcher
@@ -58,7 +60,7 @@ export default function Layout({ children }) {
   const [createError, setCreateError] = useState(null);
   const [createLoading, setCreateLoading] = useState(false);
 
-  const visibleNav = NAV.filter((n) => !n.adminOnly || isAdmin);
+  const visibleNav = NAV.filter((n) => (!n.adminOnly || isAdmin) && (!n.superadminOnly || isSuperadmin));
 
   // Close switcher on outside click
   useEffect(() => {
