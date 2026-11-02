@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { RequireAuth } from './lib/auth';
+import { RequireAuth, useAuth } from './lib/auth';
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
@@ -7,6 +7,8 @@ import VerifyEmailPage from './pages/VerifyEmailPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import AcceptInvitePage from './pages/AcceptInvitePage';
+import LandingPage from './pages/LandingPage';
+import DocsPage from './pages/DocsPage';
 import OverviewPage from './pages/OverviewPage';
 import NotificationsPage from './pages/NotificationsPage';
 import NotificationDetailPage from './pages/NotificationDetailPage';
@@ -23,6 +25,20 @@ import SuppressionsPage from './pages/settings/SuppressionsPage';
 import AccountPage from './pages/settings/AccountPage';
 import PlatformPage from './pages/PlatformPage';
 
+function HomeRoute() {
+  const { user } = useAuth();
+  if (user) {
+    return (
+      <RequireAuth>
+        <Layout>
+          <OverviewPage />
+        </Layout>
+      </RequireAuth>
+    );
+  }
+  return <LandingPage />;
+}
+
 export default function App() {
   return (
     <Routes>
@@ -32,16 +48,8 @@ export default function App() {
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/accept-invite" element={<AcceptInvitePage />} />
-      <Route
-        path="/"
-        element={
-          <RequireAuth>
-            <Layout>
-              <OverviewPage />
-            </Layout>
-          </RequireAuth>
-        }
-      />
+      <Route path="/" element={<HomeRoute />} />
+      <Route path="/docs" element={<DocsPage />} />
       <Route
         path="/notifications"
         element={

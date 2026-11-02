@@ -6,6 +6,7 @@ import { describeError } from '../lib/errors';
 
 const NAV = [
   { to: '/', label: 'Overview', exact: true },
+  { to: '/docs', label: 'Docs', exact: false },
   { to: '/notifications', label: 'Notifications', exact: false },
   { to: '/templates', label: 'Templates', exact: false },
   { to: '/send', label: 'Send', exact: false, adminOnly: true },

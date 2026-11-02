@@ -1,0 +1,26 @@
+{
+  "id": "FEAT-004",
+  "type": "feat",
+  "description": "Landing page, docs page, App routing, and Layout nav update. Depends on FEAT-002 (absoluteApiBase export). LandingPage is a public marketing page at / for logged-out users. DocsPage is a full API reference at /docs. App.jsx gets a HomeRoute that shows LandingPage to unauthenticated visitors and OverviewPage to authenticated ones. Layout.jsx gets a Docs nav link.",
+  "status": "completed",
+  "steps": [
+    "Read frontend/src/App.jsx, frontend/src/components/Layout.jsx, and frontend/src/lib/auth.js (or auth.jsx) to understand the useAuth hook API before making any changes.",
+    "Create frontend/src/pages/LandingPage.jsx. The page must work without auth context. Sections: (1) Navbar with logo 'Notify' and /login + /signup links. (2) Hero: dark bg, large heading 'Open-source notification infrastructure', subheading, two CTA buttons — 'Get started free' linking to /signup and 'View docs' linking to /docs. (3) Features grid (3 cards): 'Multi-channel' (email/SMS/webhook), 'Templates' (Jinja2 variables), 'API-first' (REST + idempotency). (4) How it works: 3-step visual. (5) Live API example: pre/code block with a curl example using absoluteApiBase(), copy button. (6) Footer with MIT license text and GitHub link placeholder. Import absoluteApiBase from '../lib/api'. Use Tailwind classes consistent with existing dark-theme style (gray-900, blue-600, gray-300). Import Link from react-router-dom for internal links.",
+    "Create frontend/src/pages/DocsPage.jsx. Structure: two-column layout with sticky left sidebar on desktop, full-width on mobile. Sidebar has anchor links to: #auth, #email, #sms, #webhook, #bulk, #templates, #suppressions. Each section has: endpoint badge (method + path), description, request body schema table, curl example using absoluteApiBase(), example JSON response in a pre block, copy button. Import absoluteApiBase from '../lib/api'. Use same dark-theme Tailwind classes.",
+    "Update frontend/src/App.jsx: (a) Import LandingPage from './pages/LandingPage'. (b) Import DocsPage from './pages/DocsPage'. (c) Import useAuth from './lib/auth'. (d) Add a HomeRoute function component before the App export: function HomeRoute() { const { user } = useAuth(); if (user) { return <RequireAuth><Layout><OverviewPage /></Layout></RequireAuth>; } return <LandingPage />; }. (e) Replace the '/' route's element with <HomeRoute />. (f) Add a new route <Route path=\"/docs\" element={<DocsPage />} /> before the catch-all '*' route.",
+    "Update frontend/src/components/Layout.jsx NAV array: add { to: '/docs', label: 'Docs', exact: false } entry. Position it after the Overview entry. Do not add adminOnly or superadminOnly restrictions."
+  ],
+  "acceptance_criteria": [
+    "frontend/src/pages/LandingPage.jsx exists and uses absoluteApiBase()",
+    "frontend/src/pages/DocsPage.jsx exists and uses absoluteApiBase()",
+    "App.jsx has a HomeRoute that renders LandingPage for unauthenticated users",
+    "App.jsx has a /docs route",
+    "Layout.jsx NAV array includes a Docs entry",
+    "cd frontend && npm run build exits 0 with no errors"
+  ],
+  "verification": [
+    "cd frontend && npm run build"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
