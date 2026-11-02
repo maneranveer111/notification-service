@@ -2,15 +2,6 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { absoluteApiBase } from '../lib/api';
 
-const curlExample = `curl -X POST ${absoluteApiBase()}/notifications/email \\
-  -H "Authorization: Bearer YOUR_API_KEY" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "recipient": "user@example.com",
-    "subject": "Hello from Notify",
-    "body": "Your notification is delivered."
-  }'`;
-
 const FEATURES = [
   {
     title: 'Multi-channel',
@@ -49,6 +40,14 @@ const HOW_IT_WORKS = [
 
 export default function LandingPage() {
   const [copied, setCopied] = useState(false);
+  const curlExample = `curl -X POST ${absoluteApiBase()}/notifications/email \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "recipient": "user@example.com",
+    "subject": "Hello from Notify",
+    "body": "Your notification is delivered."
+  }'`;
 
   function handleCopy() {
     navigator.clipboard.writeText(curlExample).then(() => {

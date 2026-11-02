@@ -28,7 +28,7 @@ from app.models.workspace import Membership, Workspace
 from app.services.crypto import encrypt_json
 from app.services.jwt_tokens import create_access_token
 from app.services.passwords import hash_password
-from app.services.providers import resolve_email_providers, resolve_sms_provider
+from app.services.providers import resolve_email_providers, resolve_sms_provider, has_email_provider, has_sms_provider
 from app.services.tenancy import generate_workspace_slug
 from app.tasks.notification_tasks import send_email_task, send_sms_task, send_webhook_task
 
@@ -308,3 +308,107 @@ def test_8_suppression_reason_manual_rejected(db):
         json={"channel": "email", "recipient": "manual@example.com", "reason": "manual"},
     )
     assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# 9. has_email_provider: own credential -> True regardless of platform flag
+# ---------------------------------------------------------------------------
+
+def test_9_has_email_provider_own_cred_returns_true(db):
+    ws = _create_workspace(db, name="HasEmailOwnWS", use_platform_providers=False)
+
+    config_data = {
+        "api_key": "xkeysib-test-key-1111",
+        "from_email": "own@workspace.example.com",
+        "from_name": "Own WS",
+    }
+    cred = ProviderCredential(
+        workspace_id=ws.id,
+        provider="brevo",
+        config_encrypted=encrypt_json(config_data),
+        is_active=True,
+    )
+    db.add(cred)
+    db.commit()
+
+    # Platform is disabled (use_platform_providers=False) but own cred exists -> True
+    with _settings_override(
+        brevo_api_key="",
+        brevo_from_email="",
+        email_provider_order="brevo,smtp",
+    ):
+        result = has_email_provider(db, ws)
+
+    assert result is True
+
+
+# ---------------------------------------------------------------------------
+# 10. has_email_provider: no own cred, no platform -> False
+# ---------------------------------------------------------------------------
+
+def test_10_has_email_provider_no_cred_no_platform_returns_false(db):
+    ws = _create_workspace(db, name="HasEmailNoneWS", use_platform_providers=False)
+    # No ProviderCredential rows, use_platform_providers=False
+
+    with _settings_override(
+        brevo_api_key="",
+        brevo_from_email="",
+        smtp_host="",
+        smtp_user="",
+        smtp_password="",
+        smtp_from_email="",
+        email_provider_order="brevo,smtp",
+    ):
+        result = has_email_provider(db, ws)
+
+    assert result is False
+
+
+# ---------------------------------------------------------------------------
+# 11. has_sms_provider: own Twilio credential -> True regardless of platform flag
+# ---------------------------------------------------------------------------
+
+def test_11_has_sms_provider_own_cred_returns_true(db):
+    ws = _create_workspace(db, name="HasSMSOwnWS", use_platform_providers=False)
+
+    config_data = {
+        "account_sid": "ACworkspace9999999999999999999999",
+        "auth_token": "own_auth_token_000000000000000000",
+        "from_number": "+19995550002",
+    }
+    cred = ProviderCredential(
+        workspace_id=ws.id,
+        provider="twilio",
+        config_encrypted=encrypt_json(config_data),
+        is_active=True,
+    )
+    db.add(cred)
+    db.commit()
+
+    # Platform is disabled but own cred exists -> True
+    with _settings_override(
+        twilio_account_sid="",
+        twilio_auth_token="",
+        twilio_from_number="",
+    ):
+        result = has_sms_provider(db, ws)
+
+    assert result is True
+
+
+# ---------------------------------------------------------------------------
+# 12. has_sms_provider: no own cred, no platform -> False
+# ---------------------------------------------------------------------------
+
+def test_12_has_sms_provider_no_cred_no_platform_returns_false(db):
+    ws = _create_workspace(db, name="HasSMSNoneWS", use_platform_providers=False)
+    # No ProviderCredential rows, use_platform_providers=False
+
+    with _settings_override(
+        twilio_account_sid="",
+        twilio_auth_token="",
+        twilio_from_number="",
+    ):
+        result = has_sms_provider(db, ws)
+
+    assert result is False

@@ -2,8 +2,6 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { absoluteApiBase } from '../lib/api';
 
-const apiBase = absoluteApiBase();
-
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
@@ -74,44 +72,45 @@ function CodeBlock({ code, language = 'bash' }) {
 }
 
 // ---------------------------------------------------------------------------
-// Section data
+// Section data — built inside the component so apiBase is always current
 // ---------------------------------------------------------------------------
-const SECTIONS = [
-  {
-    id: 'auth',
-    title: 'Authentication',
-    method: 'POST',
-    path: '/auth/login',
-    description: 'Obtain a bearer token by exchanging email and password credentials. Include the token as an Authorization header on all subsequent requests.',
-    schema: [
-      { field: 'email', type: 'string', required: true, description: 'User email address' },
-      { field: 'password', type: 'string', required: true, description: 'User password' },
-    ],
-    curl: `curl -X POST ${apiBase}/auth/login \\
+function buildSections(apiBase) {
+  return [
+    {
+      id: 'auth',
+      title: 'Authentication',
+      method: 'POST',
+      path: '/auth/login',
+      description: 'Obtain a bearer token by exchanging email and password credentials. Include the token as an Authorization header on all subsequent requests.',
+      schema: [
+        { field: 'email', type: 'string', required: true, description: 'User email address' },
+        { field: 'password', type: 'string', required: true, description: 'User password' },
+      ],
+      curl: `curl -X POST ${apiBase}/auth/login \\
   -H "Content-Type: application/json" \\
   -d '{"email":"user@example.com","password":"secret"}'`,
-    response: `{
+      response: `{
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "token_type": "bearer",
   "user": { "id": "usr_1", "email": "user@example.com" },
   "workspace": { "id": "ws_1", "name": "My Workspace", "role": "admin" }
 }`,
-  },
-  {
-    id: 'email',
-    title: 'Send Email',
-    method: 'POST',
-    path: '/notifications/email',
-    description: 'Send a transactional email. Supports plain-text body or a template reference with Jinja2 variables. Include an Idempotency-Key header to prevent duplicate sends.',
-    schema: [
-      { field: 'recipient', type: 'string', required: true, description: 'Recipient email address' },
-      { field: 'subject', type: 'string', required: true, description: 'Email subject line' },
-      { field: 'body', type: 'string', required: false, description: 'Plain-text or HTML body (mutually exclusive with template_id)' },
-      { field: 'template_id', type: 'string', required: false, description: 'Template ID to render (mutually exclusive with body)' },
-      { field: 'template_vars', type: 'object', required: false, description: 'Variables passed to the Jinja2 template' },
-      { field: 'scheduled_at', type: 'string (ISO 8601)', required: false, description: 'Schedule delivery for a future time' },
-    ],
-    curl: `curl -X POST ${apiBase}/notifications/email \\
+    },
+    {
+      id: 'email',
+      title: 'Send Email',
+      method: 'POST',
+      path: '/notifications/email',
+      description: 'Send a transactional email. Supports plain-text body or a template reference with Jinja2 variables. Include an Idempotency-Key header to prevent duplicate sends.',
+      schema: [
+        { field: 'recipient', type: 'string', required: true, description: 'Recipient email address' },
+        { field: 'subject', type: 'string', required: true, description: 'Email subject line' },
+        { field: 'body', type: 'string', required: false, description: 'Plain-text or HTML body (mutually exclusive with template_id)' },
+        { field: 'template_id', type: 'string', required: false, description: 'Template ID to render (mutually exclusive with body)' },
+        { field: 'template_vars', type: 'object', required: false, description: 'Variables passed to the Jinja2 template' },
+        { field: 'scheduled_at', type: 'string (ISO 8601)', required: false, description: 'Schedule delivery for a future time' },
+      ],
+      curl: `curl -X POST ${apiBase}/notifications/email \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -H "Idempotency-Key: unique-key-123" \\
@@ -120,79 +119,79 @@ const SECTIONS = [
     "subject": "Welcome to Notify",
     "body": "Thanks for signing up!"
   }'`,
-    response: `{
+      response: `{
   "id": "notif_abc123",
   "status": "pending",
   "channel": "email",
   "recipient": "user@example.com",
   "created_at": "2024-01-15T10:30:00Z"
 }`,
-  },
-  {
-    id: 'sms',
-    title: 'Send SMS',
-    method: 'POST',
-    path: '/notifications/sms',
-    description: 'Send an SMS message via a configured SMS provider (e.g. Twilio). The workspace must have an SMS provider credential configured.',
-    schema: [
-      { field: 'recipient', type: 'string', required: true, description: 'Recipient phone number in E.164 format (e.g. +15551234567)' },
-      { field: 'body', type: 'string', required: false, description: 'Message text (mutually exclusive with template_id)' },
-      { field: 'template_id', type: 'string', required: false, description: 'Template ID to render' },
-      { field: 'template_vars', type: 'object', required: false, description: 'Variables passed to the template' },
-    ],
-    curl: `curl -X POST ${apiBase}/notifications/sms \\
+    },
+    {
+      id: 'sms',
+      title: 'Send SMS',
+      method: 'POST',
+      path: '/notifications/sms',
+      description: 'Send an SMS message via a configured SMS provider (e.g. Twilio). The workspace must have an SMS provider credential configured.',
+      schema: [
+        { field: 'recipient', type: 'string', required: true, description: 'Recipient phone number in E.164 format (e.g. +15551234567)' },
+        { field: 'body', type: 'string', required: false, description: 'Message text (mutually exclusive with template_id)' },
+        { field: 'template_id', type: 'string', required: false, description: 'Template ID to render' },
+        { field: 'template_vars', type: 'object', required: false, description: 'Variables passed to the template' },
+      ],
+      curl: `curl -X POST ${apiBase}/notifications/sms \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
     "recipient": "+15551234567",
     "body": "Your verification code is 123456"
   }'`,
-    response: `{
+      response: `{
   "id": "notif_def456",
   "status": "pending",
   "channel": "sms",
   "recipient": "+15551234567",
   "created_at": "2024-01-15T10:31:00Z"
 }`,
-  },
-  {
-    id: 'webhook',
-    title: 'Send Webhook',
-    method: 'POST',
-    path: '/notifications/webhook',
-    description: 'Dispatch an HTTP POST to a target URL with a JSON payload. Notify handles retries with exponential backoff on non-2xx responses.',
-    schema: [
-      { field: 'recipient', type: 'string (URL)', required: true, description: 'Target URL to POST the webhook payload to' },
-      { field: 'body', type: 'string or object', required: true, description: 'Webhook payload (sent as JSON)' },
-      { field: 'template_id', type: 'string', required: false, description: 'Template ID to render the payload' },
-      { field: 'template_vars', type: 'object', required: false, description: 'Variables passed to the template' },
-    ],
-    curl: `curl -X POST ${apiBase}/notifications/webhook \\
+    },
+    {
+      id: 'webhook',
+      title: 'Send Webhook',
+      method: 'POST',
+      path: '/notifications/webhook',
+      description: 'Dispatch an HTTP POST to a target URL with a JSON payload. Notify handles retries with exponential backoff on non-2xx responses.',
+      schema: [
+        { field: 'recipient', type: 'string (URL)', required: true, description: 'Target URL to POST the webhook payload to' },
+        { field: 'body', type: 'string or object', required: true, description: 'Webhook payload (sent as JSON)' },
+        { field: 'template_id', type: 'string', required: false, description: 'Template ID to render the payload' },
+        { field: 'template_vars', type: 'object', required: false, description: 'Variables passed to the template' },
+      ],
+      curl: `curl -X POST ${apiBase}/notifications/webhook \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
     "recipient": "https://example.com/hooks/notify",
     "body": {"event":"user.created","user_id":"u_99"}
   }'`,
-    response: `{
+      response: `{
   "id": "notif_ghi789",
   "status": "pending",
   "channel": "webhook",
   "recipient": "https://example.com/hooks/notify",
   "created_at": "2024-01-15T10:32:00Z"
 }`,
-  },
-  {
-    id: 'bulk',
-    title: 'Bulk Send',
-    method: 'POST',
-    path: '/notifications/bulk',
-    description: 'Submit multiple notifications in a single request. Returns a batch ID you can poll for status. All items in a batch share the same channel.',
-    schema: [
-      { field: 'channel', type: 'string', required: true, description: 'Channel for all items: email, sms, or webhook' },
-      { field: 'notifications', type: 'array', required: true, description: 'Array of notification objects (same fields as single-send)' },
-    ],
-    curl: `curl -X POST ${apiBase}/notifications/bulk \\
+    },
+    {
+      id: 'bulk',
+      title: 'Bulk Send',
+      method: 'POST',
+      path: '/notifications/bulk',
+      description: 'Submit multiple notifications in a single request. Returns a batch ID you can poll for status. All items in a batch share the same channel.',
+      schema: [
+        { field: 'channel', type: 'string', required: true, description: 'Channel for all items: email, sms, or webhook' },
+        { field: 'notifications', type: 'array', required: true, description: 'Array of notification objects (same fields as single-send)' },
+      ],
+      curl: `curl -X POST ${apiBase}/notifications/bulk \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -202,26 +201,26 @@ const SECTIONS = [
       {"recipient":"b@example.com","subject":"Hello","body":"Hi B"}
     ]
   }'`,
-    response: `{
+      response: `{
   "batch_id": "batch_xyz001",
   "accepted": 2,
   "rejected": 0,
   "status": "queued"
 }`,
-  },
-  {
-    id: 'templates',
-    title: 'Templates',
-    method: 'POST',
-    path: '/templates',
-    description: 'Create a reusable message template with Jinja2 variable syntax. Reference the template by ID when sending a notification.',
-    schema: [
-      { field: 'name', type: 'string', required: true, description: 'Human-readable template name' },
-      { field: 'channel', type: 'string', required: true, description: 'Channel this template is for: email, sms, or webhook' },
-      { field: 'subject', type: 'string', required: false, description: 'Subject line (email only); supports Jinja2 variables' },
-      { field: 'body', type: 'string', required: true, description: 'Template body with Jinja2 syntax, e.g. Hello {{ name }}' },
-    ],
-    curl: `curl -X POST ${apiBase}/templates \\
+    },
+    {
+      id: 'templates',
+      title: 'Templates',
+      method: 'POST',
+      path: '/templates',
+      description: 'Create a reusable message template with Jinja2 variable syntax. Reference the template by ID when sending a notification.',
+      schema: [
+        { field: 'name', type: 'string', required: true, description: 'Human-readable template name' },
+        { field: 'channel', type: 'string', required: true, description: 'Channel this template is for: email, sms, or webhook' },
+        { field: 'subject', type: 'string', required: false, description: 'Subject line (email only); supports Jinja2 variables' },
+        { field: 'body', type: 'string', required: true, description: 'Template body with Jinja2 syntax, e.g. Hello {{ name }}' },
+      ],
+      curl: `curl -X POST ${apiBase}/templates \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -230,48 +229,50 @@ const SECTIONS = [
     "subject": "Welcome, {{ name }}!",
     "body": "Hi {{ name }}, thanks for joining."
   }'`,
-    response: `{
+      response: `{
   "id": "tmpl_w3lc0m3",
   "name": "welcome-email",
   "channel": "email",
   "created_at": "2024-01-15T09:00:00Z"
 }`,
-  },
-  {
-    id: 'suppressions',
-    title: 'Suppressions',
-    method: 'POST',
-    path: '/suppressions',
-    description: 'Add a recipient to the suppression list so they will not receive notifications of the specified channel. Use GET /suppressions to list active suppressions.',
-    schema: [
-      { field: 'recipient', type: 'string', required: true, description: 'Email address or phone number to suppress' },
-      { field: 'channel', type: 'string', required: true, description: 'Channel to suppress: email or sms' },
-      { field: 'reason', type: 'string', required: false, description: 'Optional reason for suppression (e.g. unsubscribe, bounce)' },
-    ],
-    curl: `curl -X POST ${apiBase}/suppressions \\
+    },
+    {
+      id: 'suppressions',
+      title: 'Suppressions',
+      method: 'POST',
+      path: '/suppressions',
+      description: 'Add a recipient to the suppression list so they will not receive notifications of the specified channel. Use GET /suppressions to list active suppressions.',
+      schema: [
+        { field: 'recipient', type: 'string', required: true, description: 'Email address or phone number to suppress' },
+        { field: 'channel', type: 'string', required: true, description: 'Channel to suppress: email or sms' },
+        { field: 'reason', type: 'string', required: false, description: 'Optional reason for suppression: opt_out or bounce' },
+      ],
+      curl: `curl -X POST ${apiBase}/suppressions \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
     "recipient": "user@example.com",
     "channel": "email",
-    "reason": "unsubscribe"
+    "reason": "opt_out"
   }'`,
-    response: `{
+      response: `{
   "id": "sup_001",
   "recipient": "user@example.com",
   "channel": "email",
-  "reason": "unsubscribe",
+  "reason": "opt_out",
   "created_at": "2024-01-15T11:00:00Z"
 }`,
-  },
-];
-
-const SIDEBAR_LINKS = SECTIONS.map((s) => ({ id: s.id, title: s.title }));
+    },
+  ];
+}
 
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 export default function DocsPage() {
+  const apiBase = absoluteApiBase();
+  const SECTIONS = buildSections(apiBase);
+  const SIDEBAR_LINKS = SECTIONS.map((s) => ({ id: s.id, title: s.title }));
   return (
     <div className="min-h-screen bg-gray-950 text-white">
       {/* Top bar */}
