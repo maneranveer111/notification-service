@@ -89,3 +89,19 @@ jobs:
           npm ci
           npm run build
 
+  docker:
+    name: Docker Build Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate docker-compose config
+        run: docker compose config --quiet
+
+      - name: Build backend image
+        run: docker compose build api
+
+      - name: Build frontend image
+        run: docker compose build web
+
