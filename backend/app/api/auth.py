@@ -11,6 +11,7 @@ from app.models.user import User
 from app.models.workspace import Membership, Workspace
 from app.schemas.auth import AuthMeResponse, LoginRequest, TokenResponse, UserAuthInfo, WorkspaceInfo
 from app.security import Principal, get_user_principal
+from app.services.client_ip import client_ip
 from app.services.jwt_tokens import create_access_token
 from app.services.passwords import hash_password, verify_password
 
@@ -21,7 +22,7 @@ _DUMMY_HASH = hash_password("not-a-real-password-timing-defense")
 
 
 @router.post("/login", response_model=TokenResponse)
-@limiter.limit("5/minute")
+@limiter.limit("5/minute", key_func=client_ip)
 def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)):
     email = payload.email.strip().lower()
     user = db.scalar(select(User).where(User.email == email))

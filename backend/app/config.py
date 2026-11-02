@@ -63,6 +63,12 @@ class Settings(BaseSettings):
     system_mail_backend: str = "provider"  # provider | console
     frontend_public_url: str = "http://localhost:5173"
 
+    # Per-workspace provider credentials & hardening (Tier 4C1)
+    encryption_key: str | None = None  # Fernet key(s), comma-separated; first encrypts, all decrypt
+    allow_private_smtp_hosts: bool = False  # Set true for self-hosters with internal mail relay
+    trusted_proxy_count: int = 0
+    rate_limit_storage_uri: str | None = None
+
     @property
     def frontend_origins(self) -> list[str]:
         return [origin.strip() for origin in self.frontend_url.split(",") if origin.strip()]

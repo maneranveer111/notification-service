@@ -16,6 +16,8 @@ from app.models.delivery_attempt import DeliveryAttempt
 from app.models.notification import Notification
 from app.models.suppression import Suppression
 from app.models.template import Template
+from app.models.workspace import Workspace
+from app.services.providers import has_email_provider, has_sms_provider
 from app.schemas.notification import (
     BatchStatusResponse,
     BulkNotificationCreate,
@@ -253,6 +255,13 @@ def queue_email(
 ):
     _validate_scheduled_at(payload.scheduled_at, settings.schedule_max_days)
 
+    ws = db.get(Workspace, principal.workspace_id) if principal.workspace_id else None
+    if not has_email_provider(db, ws):
+        raise HTTPException(
+            status_code=422,
+            detail={"detail": "No email provider is configured for this workspace", "code": "no_provider"},
+        )
+
     template_id = None
     subject = payload.subject
     body = payload.body
@@ -316,6 +325,13 @@ def queue_sms(
     idempotency_key: str | None = Header(default=None, max_length=200),
 ):
     _validate_scheduled_at(payload.scheduled_at, settings.schedule_max_days)
+
+    ws = db.get(Workspace, principal.workspace_id) if principal.workspace_id else None
+    if not has_sms_provider(db, ws):
+        raise HTTPException(
+            status_code=422,
+            detail={"detail": "No SMS provider is configured for this workspace", "code": "no_provider"},
+        )
 
     template_id = None
     body = payload.message
@@ -431,6 +447,18 @@ def bulk_notifications(
         )
 
     _validate_scheduled_at(payload.scheduled_at, settings.schedule_max_days)
+
+    ws = db.get(Workspace, principal.workspace_id) if principal.workspace_id else None
+    if payload.channel == "email" and not has_email_provider(db, ws):
+        raise HTTPException(
+            status_code=422,
+            detail={"detail": "No email provider is configured for this workspace", "code": "no_provider"},
+        )
+    elif payload.channel == "sms" and not has_sms_provider(db, ws):
+        raise HTTPException(
+            status_code=422,
+            detail={"detail": "No SMS provider is configured for this workspace", "code": "no_provider"},
+        )
 
     if payload.channel == "email" and payload.category == "marketing" and not settings.unsubscribe_secret:
         raise HTTPException(

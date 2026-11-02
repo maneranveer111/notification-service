@@ -130,8 +130,9 @@ def test_client_ownership_scoping():
 
     # Move client B to a distinct workspace to test workspace isolation
     db = next(get_db())
+    import secrets
     from app.models.workspace import Workspace
-    ws_b = Workspace(name="WS B", slug=f"ws-b-{uuid.uuid4().hex[:6]}")
+    ws_b = Workspace(name="WS B", slug=f"ws-b-{uuid.uuid4().hex[:6]}", webhook_token=secrets.token_urlsafe(32))
     db.add(ws_b)
     db.commit()
     db.refresh(ws_b)
@@ -205,8 +206,9 @@ def test_same_idempotency_key_two_clients_creates_two_rows():
 
     # Move client B to a distinct workspace
     db = next(get_db())
+    import secrets
     from app.models.workspace import Workspace
-    ws_b = Workspace(name="WS B Idem", slug=f"ws-b-idem-{uuid.uuid4().hex[:6]}")
+    ws_b = Workspace(name="WS B Idem", slug=f"ws-b-idem-{uuid.uuid4().hex[:6]}", webhook_token=secrets.token_urlsafe(32), use_platform_providers=True)
     db.add(ws_b)
     db.commit()
     db.refresh(ws_b)

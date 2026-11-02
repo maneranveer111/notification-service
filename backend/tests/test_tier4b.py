@@ -4,6 +4,7 @@ Tests signup, email verification, password reset, invitations, and change-passwo
 """
 import contextlib
 import hashlib
+import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
@@ -113,7 +114,11 @@ def _auth_headers(user: User, workspace_id=None):
 
 
 def _create_workspace_for_user(db, user, role="owner"):
-    ws = Workspace(name=f"WS {uuid.uuid4().hex[:6]}", slug=generate_workspace_slug("Test WS"))
+    ws = Workspace(
+        name=f"WS {uuid.uuid4().hex[:6]}",
+        slug=generate_workspace_slug("Test WS"),
+        webhook_token=secrets.token_urlsafe(32),
+    )
     db.add(ws)
     db.flush()
     mem = Membership(user_id=user.id, workspace_id=ws.id, role=role)

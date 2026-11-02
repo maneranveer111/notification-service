@@ -1,4 +1,5 @@
 from uuid import UUID
+import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -90,7 +91,7 @@ def create_workspace(
     else:
         slug = generate_workspace_slug(payload.name + "-ws")
 
-    ws = Workspace(name=payload.name, slug=slug)
+    ws = Workspace(name=payload.name, slug=slug, webhook_token=secrets.token_urlsafe(32))
     db.add(ws)
     db.flush()
 

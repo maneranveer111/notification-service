@@ -285,6 +285,9 @@ def test_same_idempotency_key_different_workspaces_creates_two(db):
 
     ws_b = _create_workspace_via_api(h_a, f"WS Idem B {uuid.uuid4().hex[:4]}")
     ws_b_id = ws_b["id"]
+    ws_b_obj = db.get(Workspace, uuid.UUID(ws_b_id))
+    ws_b_obj.use_platform_providers = True
+    db.commit()
     user_b = _make_user_with_workspace(db, f"idem_b_{uuid.uuid4().hex[:8]}@example.com", ws_id=uuid.UUID(ws_b_id))
     h_b = _jwt_headers(user_b.id, user_b.email, "owner", workspace_id=uuid.UUID(ws_b_id))
 
@@ -314,6 +317,9 @@ def test_suppression_isolation_between_workspaces(db):
 
     ws_b = _create_workspace_via_api(h_a, f"WS B Sup {uuid.uuid4().hex[:4]}")
     ws_b_id = ws_b["id"]
+    ws_b_obj = db.get(Workspace, uuid.UUID(ws_b_id))
+    ws_b_obj.use_platform_providers = True
+    db.commit()
     user_b = _make_user_with_workspace(db, f"sup_b_{uuid.uuid4().hex[:8]}@example.com", ws_id=uuid.UUID(ws_b_id))
     h_b = _jwt_headers(user_b.id, user_b.email, "owner", workspace_id=uuid.UUID(ws_b_id))
 

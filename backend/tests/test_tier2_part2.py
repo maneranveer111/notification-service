@@ -196,8 +196,9 @@ def test_cancel_unknown_or_other_client_returns_404():
 
     # Move client B to a distinct workspace
     db = next(get_db())
+    import secrets
     from app.models.workspace import Workspace
-    ws_b = Workspace(name="WS B Cancel", slug=f"ws-b-cancel-{uuid.uuid4().hex[:6]}")
+    ws_b = Workspace(name="WS B Cancel", slug=f"ws-b-cancel-{uuid.uuid4().hex[:6]}", webhook_token=secrets.token_urlsafe(32))
     db.add(ws_b)
     db.commit()
     db.refresh(ws_b)
@@ -341,8 +342,9 @@ def test_batch_scoping_other_client_returns_404():
 
     # Move client B to a distinct workspace
     db = next(get_db())
+    import secrets
     from app.models.workspace import Workspace
-    ws_b = Workspace(name="WS B Batch", slug=f"ws-b-batch-{uuid.uuid4().hex[:6]}")
+    ws_b = Workspace(name="WS B Batch", slug=f"ws-b-batch-{uuid.uuid4().hex[:6]}", webhook_token=secrets.token_urlsafe(32))
     db.add(ws_b)
     db.commit()
     db.refresh(ws_b)

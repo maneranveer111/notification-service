@@ -3,34 +3,42 @@ import requests
 from twilio.base.exceptions import TwilioRestException
 from twilio.rest import Client
 
-from app.config import get_settings
 from app.services.errors import PermanentError, TransientError
+from app.services.providers import TwilioConfig, get_platform_sms_provider
 
 logger = logging.getLogger(__name__)
 
 
-def send_sms(recipient: str, message: str) -> str | None:
+def send_sms(recipient: str, message: str, config: TwilioConfig | None = None) -> str | None:
     """
-    Send SMS using Twilio API.
+    Send SMS using Twilio API with provided TwilioConfig or platform credentials.
 
     Returns:
         provider_message_id (Twilio SID) if successful
     """
-    settings = get_settings()
+    if config is None:
+        config = get_platform_sms_provider()
+
+    if config is None:
+        raise PermanentError("No SMS provider is configured for this workspace. Connect one in Settings.")
+
     try:
         # Step 1: Create Twilio client
         client = Client(
-            settings.twilio_account_sid,
-            settings.twilio_auth_token,
+            config.account_sid,
+            config.auth_token,
         )
 
         # Step 2: Send SMS
-        sms = client.messages.create(
-            body=message,
-            from_=settings.twilio_from_number,  # IMPORTANT: underscore is required
-            to=recipient,
-            status_callback=f"{settings.public_base_url}/webhooks/twilio",
-        )
+        kwargs = {
+            "body": message,
+            "from_": config.from_number,
+            "to": recipient,
+        }
+        if config.status_callback:
+            kwargs["status_callback"] = config.status_callback
+
+        sms = client.messages.create(**kwargs)
 
         logger.info(f"Twilio message SID: {sms.sid}")
         return sms.sid

@@ -15,6 +15,7 @@ from app.database import SessionLocal
 import app.models  # noqa: F401 - ensures all models (Template, ApiClient, etc.) are registered on Base.metadata
 from app.models.delivery_attempt import DeliveryAttempt
 from app.models.notification import Notification
+from app.models.workspace import Workspace
 from app.services.email_service import send_email
 from app.services.sms_service import send_sms
 from app.services.webhook_service import send_webhook
@@ -210,16 +211,17 @@ def _deliver(task: Task, notification_id: str, send_fn) -> dict:
                 _footer = f"\n\n---\nTo unsubscribe: {settings.public_base_url}/unsubscribe?token={_token}"
                 original_body = notification.body or ""
 
-                def _send_with_footer(n, on_attempt=None, _body=original_body + _footer):
-                    return send_fn_with_body(n, _body, on_attempt=on_attempt)
+                def _send_with_footer(n, on_attempt=None, providers=None, _body=original_body + _footer):
+                    return send_fn_with_body(n, _body, on_attempt=on_attempt, providers=providers)
 
-                def send_fn_with_body(n, body, on_attempt=None):
+                def send_fn_with_body(n, body, on_attempt=None, providers=None):
                     try:
                         return send_email(
                             recipient=n.recipient,
                             subject=n.subject or "",
                             body=body,
                             on_attempt=on_attempt,
+                            providers=providers,
                         )
                     except TypeError:
                         return send_email(
@@ -233,9 +235,22 @@ def _deliver(task: Task, notification_id: str, send_fn) -> dict:
         start_mono = time.perf_counter()
         started_at = datetime.now(timezone.utc)
         try:
+            ws = db.get(Workspace, notification.workspace_id) if notification.workspace_id else None
             if notification.channel == "email":
+                from app.services.providers import resolve_email_providers
+                email_providers = resolve_email_providers(db, ws)
                 try:
-                    res = effective_send_fn(notification, on_attempt=on_email_attempt)
+                    res = effective_send_fn(notification, on_attempt=on_email_attempt, providers=email_providers)
+                except TypeError:
+                    try:
+                        res = effective_send_fn(notification, on_attempt=on_email_attempt)
+                    except TypeError:
+                        res = effective_send_fn(notification)
+            elif notification.channel == "sms":
+                from app.services.providers import resolve_sms_provider
+                sms_config = resolve_sms_provider(db, ws)
+                try:
+                    res = effective_send_fn(notification, config=sms_config)
                 except TypeError:
                     res = effective_send_fn(notification)
             else:
@@ -338,11 +353,12 @@ def send_email_task(self, notification_id: str) -> dict:
     return _deliver(
         self,
         notification_id,
-        lambda n, on_attempt=None: send_email(
+        lambda n, on_attempt=None, providers=None: send_email(
             recipient=n.recipient,
             subject=n.subject or "",
             body=n.body or "",
             on_attempt=on_attempt,
+            providers=providers,
         ),
     )
 
@@ -357,9 +373,10 @@ def send_sms_task(self, notification_id: str) -> dict:
     return _deliver(
         self,
         notification_id,
-        lambda n: ("twilio", send_sms(
+        lambda n, config=None: ("twilio", send_sms(
             recipient=n.recipient,
             message=n.body or "",
+            config=config,
         )),
     )
 

@@ -9,6 +9,7 @@ from app.models.user import User
 from app.models.delivery_attempt import DeliveryAttempt
 from app.models.workspace import Workspace, Membership
 from app.models.invitation import Invitation
+from app.models.provider_credential import ProviderCredential
 
 __all__ = [
     "ApiClient",
@@ -21,6 +22,7 @@ __all__ = [
     "Workspace",
     "Membership",
     "Invitation",
+    "ProviderCredential",
 ]
 
 _DEFAULT_WS_ID_CACHE = None

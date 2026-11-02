@@ -5,7 +5,7 @@ import sys
 import time
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
@@ -19,6 +19,7 @@ from app.api.auth import router as auth_router
 from app.api.invitations import router as invitations_router
 from app.api.metrics import HTTP_REQUEST_DURATION_SECONDS, HTTP_REQUESTS_TOTAL, router as metrics_router
 from app.api.notifications import router as notifications_router
+from app.api.providers import router as providers_router
 from app.api.stats import router as stats_router
 from app.api.suppressions import router as suppressions_router
 from app.api.templates import router as templates_router
@@ -92,6 +93,16 @@ def client_rate_limit_exceeded_handler(request: Request, exc: ClientRateLimitExc
     )
 
 
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    if isinstance(exc.detail, dict):
+        content = dict(exc.detail)
+        if "detail" not in content and "message" in content:
+            content["detail"] = content["message"]
+        return JSONResponse(status_code=exc.status_code, content=content, headers=exc.headers)
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers)
+
+
 @app.middleware("http")
 async def request_id_and_metrics_middleware(request: Request, call_next):
     req_id = request.headers.get("X-Request-ID") or str(uuid4())
@@ -130,6 +141,7 @@ app.include_router(stats_router)
 app.include_router(metrics_router)
 app.include_router(workspaces_router)
 app.include_router(invitations_router)
+app.include_router(providers_router)
 
 
 @app.get("/health")

@@ -16,7 +16,10 @@ from app.config import get_settings
 from app.database import get_db
 from app.models.delivery_event import DeliveryEvent
 from app.models.notification import Notification
+from app.models.provider_credential import ProviderCredential
 from app.models.suppression import Suppression
+from app.models.workspace import Workspace
+from app.services.crypto import decrypt_json
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +144,144 @@ def apply_delivery_event(
 
     db.commit()
 
+
+# ---------------------------------------------------------------------------
+# Per-workspace delivery webhooks (Tier 4C1)
+# ---------------------------------------------------------------------------
+
+@router.post("/brevo/{token}")
+async def brevo_workspace_webhook(
+    token: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    ws = db.scalar(select(Workspace).where(Workspace.webhook_token == token))
+    if not ws:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+
+    event_type = payload.get("event", "unknown")
+    raw_message_id = payload.get("message-id") or payload.get("messageId") or payload.get("message_id")
+
+    notification = None
+    if raw_message_id:
+        raw_val = str(raw_message_id).strip()
+        stripped_val = raw_val.strip("<>")
+        wrapped_val = f"<{stripped_val}>"
+        candidates = [raw_val, stripped_val, wrapped_val]
+
+        stmt = select(Notification).where(
+            Notification.workspace_id == ws.id,
+            Notification.provider_message_id.in_(candidates),
+        )
+        notification = db.execute(stmt).scalars().first()
+
+    if not notification:
+        logger.warning(
+            f"Brevo workspace webhook: no notification found in workspace {ws.id} matching message id {raw_message_id}"
+        )
+
+    new_status = BREVO_STATUS_MAP.get(str(event_type).lower())
+    apply_delivery_event(
+        db=db,
+        notification=notification,
+        new_status=new_status,
+        provider="brevo",
+        event_type=str(event_type),
+        raw=payload,
+    )
+
+    return {"status": "ok"}
+
+
+@router.post("/twilio/{token}")
+async def twilio_workspace_webhook(
+    token: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    settings = get_settings()
+    ws = db.scalar(select(Workspace).where(Workspace.webhook_token == token))
+    if not ws:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    cred = db.scalar(
+        select(ProviderCredential).where(
+            ProviderCredential.workspace_id == ws.id,
+            ProviderCredential.provider == "twilio",
+            ProviderCredential.is_active == True,
+        )
+    )
+    if not cred:
+        raise HTTPException(status_code=404, detail="Twilio credentials not configured for workspace")
+
+    try:
+        conf = decrypt_json(cred.config_encrypted)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Twilio credentials unavailable")
+
+    auth_token = conf.get("auth_token", "")
+    if not auth_token:
+        raise HTTPException(status_code=404, detail="Twilio auth token missing")
+
+    try:
+        raw_body = await request.body()
+        parsed = parse_qs(raw_body.decode("utf-8"))
+        form_dict = {k: v[0] for k, v in parsed.items() if v}
+    except Exception:
+        form_dict = {}
+
+    if settings.webhook_verify:
+        signature = request.headers.get("X-Twilio-Signature", "")
+        url = f"{settings.public_base_url}/webhooks/twilio/{token}"
+        validator = RequestValidator(auth_token)
+        if not signature or not validator.validate(url, form_dict, signature):
+            raise HTTPException(status_code=403, detail="Invalid Twilio signature")
+
+    message_sid = form_dict.get("MessageSid")
+    message_status = form_dict.get("MessageStatus")
+    error_code = form_dict.get("ErrorCode")
+
+    notification = None
+    if message_sid:
+        stmt = select(Notification).where(
+            Notification.workspace_id == ws.id,
+            Notification.provider_message_id == str(message_sid).strip(),
+        )
+        notification = db.execute(stmt).scalars().first()
+
+    if not notification:
+        logger.warning(
+            f"Twilio workspace webhook: no notification found in workspace {ws.id} matching MessageSid {message_sid}"
+        )
+
+    status_key = str(message_status).lower() if message_status else ""
+    new_status = TWILIO_STATUS_MAP.get(status_key)
+
+    error_detail = None
+    if new_status == "undelivered" and error_code:
+        error_detail = f"Twilio error {error_code}"
+
+    apply_delivery_event(
+        db=db,
+        notification=notification,
+        new_status=new_status,
+        provider="twilio",
+        event_type=str(message_status or "unknown"),
+        raw=form_dict,
+        error_detail=error_detail,
+    )
+
+    return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Platform providers only (legacy routes)
+# ---------------------------------------------------------------------------
 
 @router.post("/brevo")
 async def brevo_webhook(

@@ -1,16 +1,18 @@
 from datetime import datetime, timezone
 import hashlib
+import secrets
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import get_db
 from app.limiter import limiter
+from app.services.client_ip import client_ip
 from app.models.invitation import Invitation
 from app.models.user import User
 from app.models.workspace import Membership, Workspace
@@ -113,7 +115,7 @@ def _build_token_response(user: User, db: Session, target_ws_id: UUID | None = N
 
 
 @router.post("/signup")
-@limiter.limit("5/hour")
+@limiter.limit("5/hour", key_func=client_ip)
 def signup(request: Request, payload: SignupRequest, db: Session = Depends(get_db)):
     if settings.signup_mode == "closed":
         raise HTTPException(
@@ -128,7 +130,11 @@ def signup(request: Request, payload: SignupRequest, db: Session = Depends(get_d
 
     target_email = payload.email.strip().lower()
 
-    # First user bootstrap
+    # First user bootstrap with advisory lock to prevent race
+    try:
+        db.execute(text("SELECT pg_advisory_xact_lock(727001);"))
+    except Exception:
+        pass
     user_count = db.scalar(select(func.count(User.id))) or 0
     if user_count == 0:
         default_ws_id = get_default_workspace_id(db)
@@ -157,13 +163,18 @@ def signup(request: Request, payload: SignupRequest, db: Session = Depends(get_d
 
     if settings.require_email_verification:
         if existing_user:
+            hash_password(payload.password)  # Timing oracle mitigation
             return JSONResponse(
                 status_code=status.HTTP_202_ACCEPTED,
                 content={"message": "If this email is not registered, a verification link has been sent.", "email": target_email},
             )
 
         ws_name = (payload.workspace_name or f"{target_email.split('@')[0]}'s Workspace").strip()
-        ws = Workspace(name=ws_name, slug=generate_workspace_slug(ws_name))
+        ws = Workspace(
+            name=ws_name,
+            slug=generate_workspace_slug(ws_name),
+            webhook_token=secrets.token_urlsafe(32),
+        )
         db.add(ws)
         db.flush()
 
@@ -195,13 +206,18 @@ def signup(request: Request, payload: SignupRequest, db: Session = Depends(get_d
         )
     else:
         if existing_user:
+            hash_password(payload.password)  # Timing oracle mitigation
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Email already registered",
             )
 
         ws_name = (payload.workspace_name or f"{target_email.split('@')[0]}'s Workspace").strip()
-        ws = Workspace(name=ws_name, slug=generate_workspace_slug(ws_name))
+        ws = Workspace(
+            name=ws_name,
+            slug=generate_workspace_slug(ws_name),
+            webhook_token=secrets.token_urlsafe(32),
+        )
         db.add(ws)
         db.flush()
 
@@ -247,7 +263,7 @@ def verify_email(payload: VerifyEmailRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/resend-verification", status_code=status.HTTP_202_ACCEPTED)
-@limiter.limit("3/hour")
+@limiter.limit("3/hour", key_func=client_ip)
 def resend_verification(request: Request, payload: ResendVerificationRequest, db: Session = Depends(get_db)):
     target_email = payload.email.strip().lower()
 
@@ -264,7 +280,7 @@ def resend_verification(request: Request, payload: ResendVerificationRequest, db
 
 
 @router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED)
-@limiter.limit("5/hour")
+@limiter.limit("5/hour", key_func=client_ip)
 def forgot_password(request: Request, payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
     target_email = payload.email.strip().lower()
 
@@ -310,7 +326,7 @@ def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db))
 
 
 @router.get("/invitation-info", response_model=InvitationInfoResponse)
-@limiter.limit("20/minute")
+@limiter.limit("20/minute", key_func=client_ip)
 def get_invitation_info(request: Request, token: str, db: Session = Depends(get_db)):
     data = decode_token(token, expected_purpose="invite")
     try:

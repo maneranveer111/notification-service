@@ -522,7 +522,8 @@ def test_stats_overview_contract_and_avg_attempts():
     from app.models.api_client import ApiClient
     from app.models.workspace import Workspace
     import hashlib
-    iso_ws = Workspace(name=f"StatsWS_{uuid.uuid4().hex[:6]}", slug=f"statsws-{uuid.uuid4().hex[:6]}")
+    import secrets
+    iso_ws = Workspace(name=f"StatsWS_{uuid.uuid4().hex[:6]}", slug=f"statsws-{uuid.uuid4().hex[:6]}", webhook_token=secrets.token_urlsafe(32))
     db.add(iso_ws)
     db.commit()
     db.refresh(iso_ws)
@@ -610,7 +611,8 @@ def test_stats_timeseries_contract_and_reconciliation():
     from app.models.api_client import ApiClient
     from app.models.workspace import Workspace
     import hashlib
-    iso_ws = Workspace(name=f"TSWS_{uuid.uuid4().hex[:6]}", slug=f"tsws-{uuid.uuid4().hex[:6]}")
+    import secrets
+    iso_ws = Workspace(name=f"TSWS_{uuid.uuid4().hex[:6]}", slug=f"tsws-{uuid.uuid4().hex[:6]}", webhook_token=secrets.token_urlsafe(32))
     db.add(iso_ws)
     db.commit()
     db.refresh(iso_ws)

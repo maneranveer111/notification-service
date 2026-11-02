@@ -37,6 +37,7 @@ from app.models.user import User
 from app.models.delivery_attempt import DeliveryAttempt
 from app.models.workspace import Workspace, Membership
 from app.models.invitation import Invitation
+from app.models.provider_credential import ProviderCredential
 
 target_metadata = Base.metadata
 

@@ -3,7 +3,7 @@ import hashlib
 import secrets
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Security, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, Security, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -13,6 +13,7 @@ from app.database import get_db
 from app.models.api_client import ApiClient
 from app.models.notification import Notification
 from app.models.user import User
+from app.models.workspace import Membership, Workspace
 from app.schemas.user import UserCreate, UserRead, UserUpdate
 from app.security import Principal, require_admin, require_superadmin
 from app.services.passwords import hash_password
@@ -303,3 +304,93 @@ def update_user(
     db.commit()
     db.refresh(user)
     return user
+
+
+class AdminWorkspaceRead(BaseModel):
+    id: UUID
+    name: str
+    slug: str
+    use_platform_providers: bool
+    member_count: int
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AdminWorkspaceUpdate(BaseModel):
+    use_platform_providers: bool
+
+
+@router.get(
+    "/workspaces",
+    response_model=list[AdminWorkspaceRead],
+    dependencies=[Security(require_superadmin)],
+)
+def list_workspaces_admin(
+    response: Response,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    principal: Principal = Depends(require_superadmin),
+    db: Session = Depends(get_db),
+):
+    total = db.scalar(select(func.count(Workspace.id))) or 0
+    response.headers["X-Total-Count"] = str(total)
+
+    stmt = (
+        select(
+            Workspace,
+            func.count(Membership.user_id).label("member_count"),
+        )
+        .outerjoin(Membership, Membership.workspace_id == Workspace.id)
+        .group_by(Workspace.id)
+        .order_by(Workspace.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    rows = db.execute(stmt).all()
+
+    return [
+        AdminWorkspaceRead(
+            id=ws.id,
+            name=ws.name,
+            slug=ws.slug,
+            use_platform_providers=ws.use_platform_providers,
+            member_count=count,
+            created_at=ws.created_at,
+        )
+        for ws, count in rows
+    ]
+
+
+@router.patch(
+    "/workspaces/{id}",
+    response_model=AdminWorkspaceRead,
+    dependencies=[Security(require_superadmin)],
+)
+def update_workspace_admin(
+    id: UUID,
+    payload: AdminWorkspaceUpdate,
+    principal: Principal = Depends(require_superadmin),
+    db: Session = Depends(get_db),
+):
+    ws = db.get(Workspace, id)
+    if not ws:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+
+    ws.use_platform_providers = payload.use_platform_providers
+    db.commit()
+    db.refresh(ws)
+
+    count = (
+        db.scalar(select(func.count(Membership.user_id)).where(Membership.workspace_id == ws.id))
+        or 0
+    )
+
+    return AdminWorkspaceRead(
+        id=ws.id,
+        name=ws.name,
+        slug=ws.slug,
+        use_platform_providers=ws.use_platform_providers,
+        member_count=count,
+        created_at=ws.created_at,
+    )

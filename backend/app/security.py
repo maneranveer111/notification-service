@@ -76,7 +76,7 @@ def get_user_principal(
 
         if user.password_changed_at:
             token_iat = payload.get("iat")
-            if token_iat is not None and token_iat < user.password_changed_at.timestamp():
+            if token_iat is not None and int(token_iat) < int(user.password_changed_at.timestamp()):
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid or expired token",
@@ -194,7 +194,7 @@ def get_principal(
 
         if user.password_changed_at:
             token_iat = payload.get("iat")
-            if token_iat is not None and token_iat < user.password_changed_at.timestamp():
+            if token_iat is not None and int(token_iat) < int(user.password_changed_at.timestamp()):
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid or expired token",
