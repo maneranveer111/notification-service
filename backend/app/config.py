@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "Notification Service"
+    environment: str = "development"  # development | production
     debug: bool = False
 
     database_url: str

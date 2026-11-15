@@ -109,3 +109,96 @@ docker compose up -d
 ```
 
 Migrations run automatically via the `migrate` service on each startup. Review the changelog before upgrading across major versions.
+
+---
+
+## Production with HTTPS
+
+For public-facing production deployments, use `docker-compose.prod.yml`. This configuration includes automatic HTTPS with Caddy, Redis password authentication, resource limits, healthchecks, and strict production security validation.
+
+### Server Requirements
+- Linux host (Ubuntu 22.04+ or Debian 12 recommended)
+- 2 CPU cores, 2 GB RAM minimum (4 GB recommended for heavier workloads)
+- Docker Engine 24+ and Docker Compose v2+
+- Public IP address with ports 80 and 443 open
+
+### 1. DNS & Firewall Configuration
+1. Create a DNS A/AAAA record pointing your domain (e.g. `notify.example.com`) to your server's public IP address.
+2. Allow incoming traffic on ports 80 (HTTP) and 443 (HTTPS) in your firewall (e.g., `ufw allow 80/tcp && ufw allow 443/tcp`).
+
+### 2. Generate Production Environment
+Run the setup generator with your domain name:
+
+```bash
+python scripts/generate_env.py --production --domain notify.example.com
+```
+
+This generates `.env` with strong random secrets (JWT secret, Redis password, Fernet encryption key, API key, etc.) and pre-configures domain URLs.
+
+> **CRITICAL WARNING — Back Up Your ENCRYPTION_KEY**:
+> The `ENCRYPTION_KEY` in `.env` is used to encrypt per-workspace credentials (e.g. SMTP passwords, API keys) at rest in the database. If this key is lost, all encrypted credentials become permanently unrecoverable. Store a copy of `ENCRYPTION_KEY` in a secure password manager or offline vault immediately.
+
+### 3. Deploy Containers
+Build and launch the full production stack:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+Caddy will automatically provision and renew a TLS certificate via Let's Encrypt or ZeroSSL.
+
+### 4. Create the First Admin Account
+Open `https://<your-domain>` in your browser. Complete the initial setup screen to register the superadmin account. Once created, signups default to `invite_only`.
+
+### 5. What ENVIRONMENT=production Enforces
+When `ENVIRONMENT=production`, the application refuses to start if security prerequisites are not met:
+- `JWT_SECRET` must be set and at least 32 characters long.
+- `ENCRYPTION_KEY` must be set and contain valid 32-byte Fernet key(s).
+- `API_KEY` must be set, at least 24 characters, and cannot be a common placeholder.
+- `UNSUBSCRIBE_SECRET` must be set.
+- `SYSTEM_MAIL_BACKEND` cannot be `console` (must use real email `provider`).
+- `PUBLIC_BASE_URL` and `FRONTEND_PUBLIC_URL` must use `https://` (unless host is localhost).
+- `SIGNUP_MODE` must be `open`, `invite_only`, or `closed`.
+
+### 6. Backups & Restore
+Use the automated POSIX shell scripts in `scripts/`:
+
+**Create a backup:**
+```bash
+./scripts/backup.sh
+```
+This dumps the database and saves a gzipped timestamped file into `backups/`, keeping the newest 14 backups.
+
+**Automate via Cron:**
+Run `crontab -e` and add a daily job at 03:00 UTC:
+```cron
+0 3 * * * cd /opt/notification-service && ./scripts/backup.sh >> /var/log/notification-backup.log 2>&1
+```
+*Always copy backups off-server (e.g. S3, rsync) for disaster recovery.*
+
+**Restore from a backup:**
+```bash
+./scripts/restore.sh backups/notifications-YYYY-MM-DD-HHMM.sql.gz
+```
+The script safely prompts for confirmation, stops API/worker processes, recreates a clean database, restores the data, and restarts services.
+
+### 7. Viewing Logs
+View real-time structured JSON container logs:
+
+```bash
+docker compose -f docker-compose.prod.yml logs -f api
+docker compose -f docker-compose.prod.yml logs -f worker
+docker compose -f docker-compose.prod.yml logs -f caddy
+```
+
+### 8. Updating in Production
+To update to a newer release:
+
+```bash
+# Pull latest code or images
+git pull
+docker compose -f docker-compose.prod.yml pull
+# Apply updates with automatic migration
+docker compose -f docker-compose.prod.yml up -d --build
+```
+

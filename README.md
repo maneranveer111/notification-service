@@ -36,6 +36,8 @@ docker compose up -d
 
 Visit [http://localhost](http://localhost) to open the dashboard.
 
+For deploying to production with automatic TLS, domain routing, and hardened secrets, see the [Production with HTTPS Guide](docs/self-hosting.md#production-with-https).
+
 ## Features
 
 - Multi-channel delivery: email (SMTP, Brevo), SMS (Twilio), webhooks

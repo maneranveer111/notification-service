@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from contextlib import asynccontextmanager
 import json
 import logging
 import sys
@@ -32,6 +33,7 @@ from app.database import get_db
 from app.limiter import limiter, rate_limit_exceeded_handler
 from app.security import ClientRateLimitExceeded
 from app.services.quota import QuotaExceeded
+from app.services.startup_checks import validate_production_or_raise
 
 settings = get_settings()
 
@@ -63,9 +65,17 @@ def configure_logging():
 
 configure_logging()
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    validate_production_or_raise(settings)
+    yield
+
+
 app = FastAPI(
     title=settings.app_name,
     debug=settings.debug,
+    lifespan=lifespan,
 )
 
 app.add_middleware(

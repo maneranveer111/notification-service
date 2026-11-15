@@ -1,9 +1,17 @@
 from celery import Celery
+from celery.signals import worker_init
 
 import app.models  # noqa: F401 - ensures all model metadata is registered when Celery loads
 from app.config import get_settings
+from app.services.startup_checks import validate_production_or_raise
 
 settings = get_settings()
+
+
+@worker_init.connect
+def on_worker_init(**kwargs):
+    validate_production_or_raise(settings)
+
 
 # Create the Celery application
 celery = Celery(

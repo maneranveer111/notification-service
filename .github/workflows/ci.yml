@@ -99,6 +99,9 @@ jobs:
       - name: Validate docker-compose config
         run: docker compose config --quiet
 
+      - name: Validate production docker-compose config
+        run: docker compose -f docker-compose.prod.yml --env-file .env.production.example config -q
+
       - name: Build backend image
         run: docker compose build api
 

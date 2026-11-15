@@ -4,6 +4,7 @@
 
 | Env Var | Default | Description |
 |---|---|---|
+| `ENVIRONMENT` | `development` | Deployment environment (`development` or `production`). When set to `production`, the app strictly validates configuration and refuses to start if any required secret is missing, weak, or insecure |
 | `APP_NAME` | `Notification Service` | Application name shown in the UI |
 | `DEBUG` | `false` | Enable debug mode (never true in production) |
 | `DATABASE_URL` | — | PostgreSQL connection string (required) |
@@ -144,4 +145,24 @@ RATE_LIMIT_STORAGE_URI=redis://:your-password@your-redis-host:6379/1
 certbot --nginx -d notifications.example.com
 ```
 
-**Cloudflare Proxy:** Set the origin to HTTP and let Cloudflare handle TLS. Set `TRUSTED_PROXY_COUNT=1` and configure `FRONTEND_URL` / `PUBLIC_BASE_URL` with the `https://` scheme.
+## Cloud Platform & Render Deployment
+
+When deploying to Render (or similar PaaS providers), the recommended API start command after initial database setup is:
+
+```bash
+sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+```
+
+*Note on migrations and workers*: When deploying updates, the worker service may briefly log database or Redis errors for a few seconds if it boots up before the API container finishes running `alembic upgrade head`. As soon as migrations complete, the worker automatically connects and begins task processing.
+
+An example Render Blueprint is available in `deploy/render.example.yaml`.
+
+## Container Images & Release Workflow
+
+Official pre-built multi-arch container images are published to GitHub Container Registry (GHCR) via the release workflow (`.github/workflows/release.yml`):
+
+- **Backend API:** `ghcr.io/<owner>/notification-service-api:<version>` (and `:latest`)
+- **Frontend Web:** `ghcr.io/<owner>/notification-service-web:<version>` (and `:latest`)
+
+The release workflow triggers automatically whenever a new version tag matching `v*` (e.g. `v1.0.0`) is pushed to the repository.
+

@@ -6,6 +6,7 @@ backup_before_tier4c1.sql
 # Environment secrets — never commit
 .env
 docker-compose.override.yml
+backups/
 
 # Frontend build output
 frontend/dist/
