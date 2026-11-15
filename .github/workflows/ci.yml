@@ -41,8 +41,9 @@ jobs:
       API_KEY: ci-test-key
       JWT_SECRET: ci-dummy-jwt-secret-key-that-is-at-least-forty-characters-long
       WEBHOOK_SECRET: ci-webhook-secret-key-1234567890
+      ENCRYPTION_KEY: KRzeF-MRCYs1unU9pmx9nJhBnNitMGqivH4kEdEFLYQ=
       UNSUBSCRIBE_SECRET: ci-unsubscribe-secret-key-1234567890
-      PUBLIC_BASE_URL: http://localhost:8000
+      PUBLIC_BASE_URL: http://localhost:8001
       FRONTEND_URL: http://localhost:5173
       CELERY_QUEUE: notification_service_ci
 
@@ -76,7 +77,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      VITE_API_BASE_URL: http://localhost:8000
+      VITE_API_BASE_URL: http://localhost:8001
 
     steps:
       - name: Checkout repository
