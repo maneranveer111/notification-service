@@ -31,7 +31,7 @@ def start_celery():
     ]
 
     if os.environ.get("ENABLE_BEAT") == "true":
-        cmd.append("-B")
+        cmd.extend(["-B", "--schedule=/tmp/celerybeat-schedule"])
 
     subprocess.run(cmd)
 

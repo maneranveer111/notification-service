@@ -52,7 +52,7 @@ export default function LoginPage() {
   const cooldownRef = useRef(null);
 
   useEffect(() => {
-    getPublicConfig().then(setConfig);
+    getPublicConfig(true).then(setConfig);
   }, []);
 
   // Redirect if already logged in

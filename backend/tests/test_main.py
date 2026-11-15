@@ -1,6 +1,8 @@
 from fastapi.testclient import TestClient
 from app.main import app
+from app.config import get_settings
 
+settings = get_settings()
 client = TestClient(app)
 
 def test_health_ckeck():
@@ -56,7 +58,7 @@ def test_valid_api_key():
     """
     response = client.post(
         "/notifications/email",
-        headers={"X-API-Key": "notifications-services-secret-key-2026"},
+        headers={"X-API-Key": settings.api_key},
         json={
             "recipient": "test@example.com",
             "subject": "Test",

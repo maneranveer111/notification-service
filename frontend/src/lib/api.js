@@ -99,12 +99,13 @@ export async function apiFetchWithCount(path, options = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// Public config (cached)
+// Public config (fresh or in-memory cached)
 // ---------------------------------------------------------------------------
-export async function getPublicConfig() {
-  if (_configCache) return _configCache;
-  _configCache = await apiFetch('/public/config');
-  return _configCache;
+export async function getPublicConfig(forceFresh = false) {
+  if (_configCache && !forceFresh) return _configCache;
+  const cfg = await apiFetch('/public/config');
+  _configCache = cfg;
+  return cfg;
 }
 
 // ---------------------------------------------------------------------------

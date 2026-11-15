@@ -16,7 +16,7 @@ config = context.config
 import os
 from app.config import get_settings
 settings = get_settings()
-db_url = os.environ.get("TEST_DATABASE_URL") or os.environ.get("ALEMBIC_DB_URL") or config.get_main_option("sqlalchemy.url") or settings.database_url
+db_url = os.environ.get("TEST_DATABASE_URL") or os.environ.get("ALEMBIC_DB_URL") or os.environ.get("DATABASE_URL") or settings.database_url
 config.set_main_option("sqlalchemy.url", db_url)
 
 # Interpret the config file for Python logging.

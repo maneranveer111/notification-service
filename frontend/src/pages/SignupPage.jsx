@@ -30,7 +30,7 @@ export default function SignupPage() {
   const cooldownRef = useRef(null);
 
   useEffect(() => {
-    getPublicConfig()
+    getPublicConfig(true)
       .then((cfg) => setConfig(cfg))
       .finally(() => setConfigLoading(false));
   }, []);

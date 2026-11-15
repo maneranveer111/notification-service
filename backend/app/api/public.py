@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -14,7 +14,8 @@ settings = get_settings()
 
 @router.get("/config")
 @limiter.limit("60/minute", key_func=client_ip)
-def get_public_config(request: Request, db: Session = Depends(get_db)):
+def get_public_config(request: Request, response: Response, db: Session = Depends(get_db)):
+    response.headers["Cache-Control"] = "no-store"
     user_count = db.scalar(select(func.count()).select_from(User))
     needs_setup = (user_count == 0) and (settings.signup_mode != "closed")
 
