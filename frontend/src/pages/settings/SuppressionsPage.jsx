@@ -1,4 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
+import {
+  Ban,
+  Plus,
+} from 'lucide-react';
 import { apiFetchWithCount, apiFetch } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import ConfirmDialog from '../../components/ConfirmDialog';
@@ -6,8 +10,16 @@ import ErrorBanner from '../../components/ErrorBanner';
 import Loading from '../../components/Loading';
 import EmptyState from '../../components/EmptyState';
 import Pagination from '../../components/Pagination';
+import Button from '../../components/ui/Button';
+import Input from '../../components/ui/Input';
+import Select from '../../components/ui/Select';
+import Card from '../../components/ui/Card';
+import Badge from '../../components/ui/Badge';
 
-const REASON_OPTIONS = ['opt_out', 'bounce'];
+const REASON_OPTIONS = [
+  { value: 'opt_out', label: 'Opt-out (Unsubscribe)' },
+  { value: 'bounce', label: 'Hard Bounce' },
+];
 
 export default function SuppressionsPage() {
   const { isAdmin } = useAuth();
@@ -20,7 +32,10 @@ export default function SuppressionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const [deleteConfirm, setDeleteConfirm] = useState({ open: false, item: null });
+  const [deleteConfirm, setDeleteConfirm] = useState({
+    open: false,
+    item: null,
+  });
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Add form
@@ -38,7 +53,9 @@ export default function SuppressionsPage() {
         offset: String((page - 1) * pageSize),
       });
       if (channelFilter !== 'all') qs.set('channel', channelFilter);
-      const { data, total: t } = await apiFetchWithCount(`/suppressions?${qs.toString()}`);
+      const { data, total: t } = await apiFetchWithCount(
+        `/suppressions?${qs.toString()}`
+      );
       setItems(data);
       setTotal(t);
       setError(null);
@@ -49,15 +66,22 @@ export default function SuppressionsPage() {
     }
   }, [page, pageSize, channelFilter]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   function handleChannelFilterChange(val) {
     setChannelFilter(val);
     setPage(1);
   }
 
-  function handlePageChange(p) { setPage(p); }
-  function handlePageSizeChange(s) { setPageSize(s); setPage(1); }
+  function handlePageChange(p) {
+    setPage(p);
+  }
+  function handlePageSizeChange(s) {
+    setPageSize(s);
+    setPage(1);
+  }
 
   async function handleDelete() {
     const item = deleteConfirm.item;
@@ -100,18 +124,27 @@ export default function SuppressionsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-base font-semibold text-white flex-1">Suppressions</h2>
+      {/* Header with filter */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-base font-semibold text-[#1C1917]">
+            Suppressions
+          </h2>
+          <p className="text-xs text-[#78716C] mt-0.5">
+            Recipients blocked from receiving notifications due to opt-outs or delivery bounces.
+          </p>
+        </div>
+
         {/* Channel filter */}
         <div className="flex items-center gap-2">
-          <label htmlFor="channel-filter" className="text-sm text-gray-400">Channel:</label>
+          <span className="text-xs text-[#78716C]">Filter by:</span>
           <select
             id="channel-filter"
             value={channelFilter}
             onChange={(e) => handleChannelFilterChange(e.target.value)}
-            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+            className="bg-white border border-[#E7E5E4] rounded-[6px] px-2.5 py-1 text-xs text-[#1C1917] focus:outline-none focus:border-[#4F46E5]"
           >
-            <option value="all">All</option>
+            <option value="all">All Channels</option>
             <option value="email">Email</option>
             <option value="sms">SMS</option>
           </select>
@@ -120,58 +153,67 @@ export default function SuppressionsPage() {
 
       {/* Add form (admin only) */}
       {isAdmin && (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
-          <h3 className="text-sm font-medium text-gray-300">Add suppression</h3>
-          <form onSubmit={handleAdd} className="flex flex-wrap gap-3 items-end">
-            <div>
-              <label htmlFor="add-channel" className="block text-xs text-gray-400 mb-1">Channel</label>
-              <select
+        <Card
+          title="Add recipient to suppression list"
+          subtitle="Manually suppress messages to a specific recipient address or phone number."
+        >
+          <form
+            onSubmit={handleAdd}
+            className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3"
+          >
+            <div className="w-full sm:w-32">
+              <Select
                 id="add-channel"
+                label="Channel"
                 value={addChannel}
                 onChange={(e) => setAddChannel(e.target.value)}
-                className="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-200 text-sm focus:outline-none focus:border-blue-500"
               >
                 <option value="email">Email</option>
                 <option value="sms">SMS</option>
-              </select>
+              </Select>
             </div>
-            <div className="flex-1 min-w-[180px]">
-              <label htmlFor="add-recipient" className="block text-xs text-gray-400 mb-1">
-                Recipient *
-              </label>
-              <input
+            <div className="flex-1 min-w-[200px]">
+              <Input
                 id="add-recipient"
+                label="Recipient *"
                 type="text"
                 required
                 value={addRecipient}
                 onChange={(e) => setAddRecipient(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
-                placeholder={addChannel === 'email' ? 'user@example.com' : '+12125550100'}
+                placeholder={
+                  addChannel === 'email' ? 'user@example.com' : '+18166843869'
+                }
               />
             </div>
-            <div>
-              <label htmlFor="add-reason" className="block text-xs text-gray-400 mb-1">Reason *</label>
-              <select
+            <div className="w-full sm:w-44">
+              <Select
                 id="add-reason"
+                label="Reason *"
                 value={addReason}
                 onChange={(e) => setAddReason(e.target.value)}
-                className="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-200 text-sm focus:outline-none focus:border-blue-500"
               >
                 {REASON_OPTIONS.map((r) => (
-                  <option key={r} value={r}>{r}</option>
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
                 ))}
-              </select>
+              </Select>
             </div>
-            <button
+            <Button
               type="submit"
-              disabled={addLoading || !addRecipient.trim()}
-              className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium"
+              variant="primary"
+              size="md"
+              loading={addLoading}
+              disabled={!addRecipient.trim()}
+              icon={Plus}
             >
-              {addLoading ? 'Adding…' : 'Add'}
-            </button>
+              Add
+            </Button>
           </form>
-          {addError && <p className="text-sm text-red-400">{addError}</p>}
-        </div>
+          {addError && (
+            <p className="text-xs text-[#B91C1C] mt-2">{addError}</p>
+          )}
+        </Card>
       )}
 
       {error && <ErrorBanner error={error} onRetry={load} />}
@@ -179,40 +221,66 @@ export default function SuppressionsPage() {
       {loading ? (
         <Loading text="Loading suppressions…" />
       ) : items.length === 0 ? (
-        <EmptyState message="No suppressions found." />
+        <EmptyState
+          icon={Ban}
+          title="No suppressions found"
+          message="No addresses or numbers are currently suppressed in this workspace."
+        />
       ) : (
-        <div className="space-y-4">
+        <div className="bg-white border border-[#E7E5E4] rounded-[8px] overflow-hidden shadow-xs">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[600px]">
-              <thead>
-                <tr className="text-left text-xs text-gray-400 uppercase tracking-wide border-b border-gray-800">
-                  <th className="pb-3 pr-4">Channel</th>
-                  <th className="pb-3 pr-4">Recipient</th>
-                  <th className="pb-3 pr-4">Reason</th>
-                  <th className="pb-3 pr-4">Source</th>
-                  <th className="pb-3 pr-4">Created</th>
-                  {isAdmin && <th className="pb-3">Actions</th>}
+            <table className="w-full text-left text-xs min-w-[600px]">
+              <thead className="bg-[#FAFAF9] border-b border-[#E7E5E4] text-[11px] font-semibold text-[#78716C] uppercase tracking-wider">
+                <tr>
+                  <th className="px-5 py-3">Channel</th>
+                  <th className="px-5 py-3">Recipient</th>
+                  <th className="px-5 py-3">Reason</th>
+                  <th className="px-5 py-3">Source</th>
+                  <th className="px-5 py-3">Created</th>
+                  {isAdmin && <th className="px-5 py-3 text-right">Actions</th>}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-800">
+              <tbody className="divide-y divide-[#E7E5E4]">
                 {items.map((item) => (
-                  <tr key={item.id} className="text-gray-300">
-                    <td className="py-3 pr-4 capitalize">{item.channel}</td>
-                    <td className="py-3 pr-4">{item.recipient}</td>
-                    <td className="py-3 pr-4 capitalize">{item.reason || '—'}</td>
-                    <td className="py-3 pr-4 capitalize text-gray-400">{item.source || '—'}</td>
-                    <td className="py-3 pr-4 text-gray-400">
-                      {new Date(item.created_at).toLocaleString()}
+                  <tr
+                    key={item.id}
+                    className="hover:bg-[#FAFAF9]/60 transition-colors h-[44px]"
+                  >
+                    <td className="px-5 py-3">
+                      <Badge variant="neutral" size="sm">
+                        <span className="capitalize">{item.channel}</span>
+                      </Badge>
+                    </td>
+                    <td className="px-5 py-3 font-mono text-[12px] text-[#1C1917]">
+                      {item.recipient}
+                    </td>
+                    <td className="px-5 py-3">
+                      <Badge
+                        variant={item.reason === 'bounce' ? 'error' : 'warning'}
+                        dot
+                        size="sm"
+                      >
+                        {item.reason === 'opt_out' ? 'Opt-out' : item.reason}
+                      </Badge>
+                    </td>
+                    <td className="px-5 py-3 capitalize text-[#78716C]">
+                      {item.source || 'system'}
+                    </td>
+                    <td className="px-5 py-3 text-[#78716C]">
+                      {new Date(item.created_at).toLocaleDateString()}
                     </td>
                     {isAdmin && (
-                      <td className="py-3">
-                        <button
-                          type="button"
-                          onClick={() => setDeleteConfirm({ open: true, item })}
-                          className="px-2 py-1 text-xs rounded bg-red-900 hover:bg-red-800 text-red-200"
+                      <td className="px-5 py-3 text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-[#B91C1C] hover:text-[#991B1B] hover:bg-[#FEF2F2]"
+                          onClick={() =>
+                            setDeleteConfirm({ open: true, item })
+                          }
                         >
-                          Delete
-                        </button>
+                          Remove
+                        </Button>
                       </td>
                     )}
                   </tr>
@@ -221,25 +289,25 @@ export default function SuppressionsPage() {
             </table>
           </div>
 
-          <Pagination
-            total={total}
-            page={page}
-            pageSize={pageSize}
-            onPageChange={handlePageChange}
-            onPageSizeChange={handlePageSizeChange}
-          />
+          <div className="p-3 bg-white">
+            <Pagination
+              total={total}
+              page={page}
+              pageSize={pageSize}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
+            />
+          </div>
         </div>
       )}
 
-      <p className="text-xs text-gray-500">
-        Suppressions prevent messages from being sent to specific recipients. They are applied automatically on bounce or unsubscribe events, or can be added manually.
-      </p>
-
+      {/* Delete Confirmation */}
       <ConfirmDialog
         open={deleteConfirm.open}
-        title="Delete suppression?"
-        message={`Remove suppression for "${deleteConfirm.item?.recipient}"? They may receive messages again.`}
-        confirmLabel="Delete"
+        destructive
+        title="Remove suppression?"
+        message={`Remove suppression for "${deleteConfirm.item?.recipient}"? They will be eligible to receive notifications again.`}
+        confirmLabel="Remove"
         loading={deleteLoading}
         onConfirm={handleDelete}
         onCancel={() => setDeleteConfirm({ open: false, item: null })}

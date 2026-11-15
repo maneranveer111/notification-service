@@ -1,10 +1,26 @@
-import { useState, useEffect, useId } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { sendEmail, sendSMS, sendWebhook, listTemplates, ApiError } from '../lib/api';
+import {
+  Mail,
+  MessageSquare,
+  Webhook,
+  Send,
+  Check,
+  Eye,
+} from 'lucide-react';
+import {
+  sendEmail,
+  sendSMS,
+  sendWebhook,
+  listTemplates,
+} from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { validateEmail, validatePhone } from '../lib/csv';
 import { describeError } from '../lib/errors';
-import ErrorBanner from '../components/ErrorBanner';
+import Button from '../components/ui/Button';
+import Input from '../components/ui/Input';
+import Select from '../components/ui/Select';
+import Switch from '../components/ui/Switch';
 
 function renderPreview(text, vars) {
   if (!text) return '';
@@ -40,7 +56,9 @@ export default function SendPage() {
   const [error, setError] = useState(null);
   const [errorAction, setErrorAction] = useState(null);
   const [successResult, setSuccessResult] = useState(null);
-  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+  const [idempotencyKey, setIdempotencyKey] = useState(() =>
+    crypto.randomUUID()
+  );
 
   // Fetch templates once on mount
   useEffect(() => {
@@ -50,7 +68,9 @@ export default function SendPage() {
   }, []);
 
   const channelTemplates = allTemplates.filter((t) => t.channel === tab);
-  const selectedTemplate = channelTemplates.find((t) => t.id === selectedTemplateId);
+  const selectedTemplate = channelTemplates.find(
+    (t) => t.id === selectedTemplateId
+  );
 
   // When switching tabs or template, update template vars
   useEffect(() => {
@@ -81,8 +101,13 @@ export default function SendPage() {
   } else if (tab === 'webhook') {
     if (!recipient.trim().startsWith('https://')) {
       validationError = 'Webhook URL must start with https://';
-    } else if (!recipient.includes('slack.com') && !recipient.includes('discord.com') && !recipient.includes('discordapp.com')) {
-      validationError = 'Only Slack (hooks.slack.com) and Discord webhook URLs are supported.';
+    } else if (
+      !recipient.includes('slack.com') &&
+      !recipient.includes('discord.com') &&
+      !recipient.includes('discordapp.com')
+    ) {
+      validationError =
+        'Only Slack (hooks.slack.com) and Discord webhook URLs are supported.';
     }
   }
 
@@ -90,9 +115,13 @@ export default function SendPage() {
     if (!selectedTemplate) {
       validationError = 'Please select a template.';
     } else {
-      const missing = (selectedTemplate.variables || []).filter((v) => !templateVars[v]?.trim());
+      const missing = (selectedTemplate.variables || []).filter(
+        (v) => !templateVars[v]?.trim()
+      );
       if (missing.length > 0) {
-        validationError = `Please provide values for all variables: ${missing.join(', ')}`;
+        validationError = `Please provide values for all variables: ${missing.join(
+          ', '
+        )}`;
       }
     }
   }
@@ -104,7 +133,8 @@ export default function SendPage() {
 
   if (!validationError && tab === 'sms' && !useTemplate) {
     if (!body.trim()) validationError = 'Message is required.';
-    else if (body.length > 1600) validationError = 'Message cannot exceed 1600 characters.';
+    else if (body.length > 1600)
+      validationError = 'Message cannot exceed 1600 characters.';
   }
 
   if (!validationError && tab === 'webhook') {
@@ -187,10 +217,9 @@ export default function SendPage() {
       }
 
       setSuccessResult(res);
-      // Generate new idempotency key for next submission
       setIdempotencyKey(crypto.randomUUID());
 
-      // Clear form values on success
+      // Reset fields on success
       setRecipient('');
       setSubject('');
       setBody('');
@@ -211,18 +240,23 @@ export default function SendPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Send Notification</h1>
+    <div className="space-y-6 max-w-[760px]">
+      <div>
+        <h1 className="text-xl sm:text-2xl font-semibold text-[#1C1917] tracking-tight">
+          Send Notification
+        </h1>
+        <p className="text-xs sm:text-sm text-[#78716C] mt-0.5">
+          Dispatch a single notification now or schedule it for future delivery.
+        </p>
       </div>
 
       {error && (
-        <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-lg bg-red-900/30 border border-red-700 text-red-300 text-sm">
-          <span>⚠ {typeof error === 'string' ? error : error?.message || String(error)}</span>
+        <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-[6px] bg-[#FEF2F2] border border-[#FECACA] text-[#B91C1C] text-xs">
+          <span>{typeof error === 'string' ? error : error?.message || String(error)}</span>
           {errorAction && (
             <Link
               to={errorAction.to}
-              className="shrink-0 px-3 py-1 rounded bg-red-800 hover:bg-red-700 text-red-100 text-xs font-medium"
+              className="shrink-0 px-2.5 py-1 rounded-[4px] bg-white border border-[#FECACA] hover:bg-[#FEF2F2] text-[#B91C1C] font-medium"
             >
               {errorAction.label}
             </Link>
@@ -232,169 +266,192 @@ export default function SendPage() {
 
       {successResult && (
         <div
-          className={`rounded-xl p-4 border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+          className={`rounded-[8px] p-4 border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
             successResult.status === 'suppressed'
-              ? 'bg-amber-950/40 border-amber-800 text-amber-300'
-              : 'bg-emerald-950/40 border-emerald-800 text-emerald-300'
+              ? 'bg-[#FEFCE8] border-[#FEF08A] text-[#A16207]'
+              : 'bg-[#F0FDF4] border-[#BBF7D0] text-[#15803D]'
           }`}
         >
           <div>
-            <p className="font-semibold text-sm">
+            <p className="font-semibold text-xs sm:text-sm flex items-center gap-1.5">
+              <Check className="w-4 h-4" strokeWidth={2} />
               {successResult.status === 'suppressed'
-                ? '⚠ Recipient is on the suppression list, nothing was sent'
-                : `Notification queued (${successResult.status})!`}
+                ? 'Recipient is suppressed — message discarded.'
+                : `Notification queued (${successResult.status})`}
             </p>
             {successResult.scheduled_at && (
-              <p className="text-xs mt-1 text-purple-300">
+              <p className="text-xs mt-1 text-[#4F46E5]">
                 Scheduled for: {new Date(successResult.scheduled_at).toLocaleString()}
               </p>
             )}
-            <p className="text-xs font-mono opacity-80 mt-0.5">ID: {successResult.id}</p>
+            <p className="text-[11px] font-mono opacity-80 mt-0.5">
+              ID: {successResult.id}
+            </p>
           </div>
-          <Link
-            to={`/notifications/${successResult.id}`}
-            className="self-start sm:self-auto px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-white text-xs font-medium border border-gray-700 shrink-0"
-          >
-            View Notification &rarr;
+          <Link to={`/notifications/${successResult.id}`}>
+            <Button variant="secondary" size="sm">
+              View Status →
+            </Button>
           </Link>
         </div>
       )}
 
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-xl">
-        {/* Tabs */}
-        <div className="flex gap-2 mb-6 border-b border-gray-800 pb-4">
-          <button
-            type="button"
-            onClick={() => setTab('email')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              tab === 'email' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-            }`}
-          >
-            Email
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('sms')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              tab === 'sms' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-            }`}
-          >
-            SMS
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('webhook')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              tab === 'webhook' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-            }`}
-          >
-            Slack / Discord
-          </button>
+      {/* Main Send Form Card */}
+      <div className="bg-white border border-[#E7E5E4] rounded-[8px] p-6 shadow-xs space-y-6">
+        {/* Underline Tabs */}
+        <div className="border-b border-[#E7E5E4] -mt-1 pb-px">
+          <div className="flex gap-6">
+            <button
+              type="button"
+              onClick={() => setTab('email')}
+              className={`pb-2.5 text-xs sm:text-sm font-medium border-b-2 flex items-center gap-2 cursor-pointer transition-colors ${
+                tab === 'email'
+                  ? 'border-[#4F46E5] text-[#1C1917]'
+                  : 'border-transparent text-[#78716C] hover:text-[#1C1917]'
+              }`}
+            >
+              <Mail className="w-4 h-4" strokeWidth={1.5} />
+              Email
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab('sms')}
+              className={`pb-2.5 text-xs sm:text-sm font-medium border-b-2 flex items-center gap-2 cursor-pointer transition-colors ${
+                tab === 'sms'
+                  ? 'border-[#4F46E5] text-[#1C1917]'
+                  : 'border-transparent text-[#78716C] hover:text-[#1C1917]'
+              }`}
+            >
+              <MessageSquare className="w-4 h-4" strokeWidth={1.5} />
+              SMS
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab('webhook')}
+              className={`pb-2.5 text-xs sm:text-sm font-medium border-b-2 flex items-center gap-2 cursor-pointer transition-colors ${
+                tab === 'webhook'
+                  ? 'border-[#4F46E5] text-[#1C1917]'
+                  : 'border-transparent text-[#78716C] hover:text-[#1C1917]'
+              }`}
+            >
+              <Webhook className="w-4 h-4" strokeWidth={1.5} />
+              Slack / Discord
+            </button>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-5">
           {/* Recipient */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1" htmlFor="recipient">
-              {tab === 'email' ? 'Recipient Email' : tab === 'sms' ? 'Recipient Phone' : 'Webhook URL'}
-            </label>
-            <input
-              id="recipient"
-              type={tab === 'email' ? 'email' : tab === 'sms' ? 'tel' : 'url'}
-              required
-              value={recipient}
-              onChange={(e) => setRecipient(e.target.value)}
-              placeholder={
-                tab === 'email'
-                  ? 'user@example.com'
-                  : tab === 'sms'
-                  ? '+15551234567'
-                  : 'https://hooks.slack.com/services/... or https://discord.com/api/webhooks/...'
-              }
-              className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
-            />
-            {tab === 'webhook' && (
-              <p className="text-xs text-gray-400 mt-1">
-                Must start with https:// and only Slack (hooks.slack.com) or Discord (discord.com) URLs are accepted.
-              </p>
-            )}
-          </div>
+          <Input
+            id="recipient"
+            label={
+              tab === 'email'
+                ? 'Recipient Email *'
+                : tab === 'sms'
+                ? 'Recipient Phone Number (E.164) *'
+                : 'Webhook Endpoint URL *'
+            }
+            type={tab === 'email' ? 'email' : tab === 'sms' ? 'tel' : 'url'}
+            required
+            value={recipient}
+            onChange={(e) => setRecipient(e.target.value)}
+            placeholder={
+              tab === 'email'
+                ? 'user@example.com'
+                : tab === 'sms'
+                ? '+18166843869'
+                : 'https://hooks.slack.com/services/... or https://discord.com/api/webhooks/...'
+            }
+            helper={
+              tab === 'webhook'
+                ? 'Only Slack (hooks.slack.com) and Discord (discord.com) URLs are accepted.'
+                : undefined
+            }
+          />
 
-          {/* Template toggle for Email/SMS */}
+          {/* Template switch for Email / SMS */}
           {tab !== 'webhook' && (
             <div className="pt-1">
-              <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-300">
-                <input
-                  type="checkbox"
-                  checked={useTemplate}
-                  onChange={(e) => setUseTemplate(e.target.checked)}
-                  className="rounded bg-gray-800 border-gray-700 text-blue-600 focus:ring-0"
-                />
-                Use a template
-              </label>
+              <Switch
+                id="toggle-template"
+                label="Use a template"
+                description="Inject dynamic parameters into a pre-registered template."
+                checked={useTemplate}
+                onChange={setUseTemplate}
+              />
             </div>
           )}
 
-          {/* Template Selection */}
+          {/* Template selection & inputs */}
           {tab !== 'webhook' && useTemplate && (
-            <div className="space-y-4 p-4 rounded-xl bg-gray-950/60 border border-gray-800">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">Select Template</label>
-                {channelTemplates.length === 0 ? (
-                  <p className="text-xs text-gray-500">No {tab.toUpperCase()} templates available. Create one first under Templates.</p>
-                ) : (
-                  <select
-                    value={selectedTemplateId}
-                    onChange={(e) => setSelectedTemplateId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white text-sm"
-                  >
-                    <option value="">-- Choose a template --</option>
-                    {channelTemplates.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name} ({t.variables?.length || 0} vars)
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
+            <div className="space-y-4 p-4 rounded-[6px] bg-[#FAFAF9] border border-[#E7E5E4]">
+              <Select
+                id="template-select"
+                label="Select Template"
+                value={selectedTemplateId}
+                onChange={(e) => setSelectedTemplateId(e.target.value)}
+              >
+                <option value="">-- Choose a template --</option>
+                {channelTemplates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} ({t.variables?.length || 0} variables)
+                  </option>
+                ))}
+              </Select>
 
               {selectedTemplate && (
                 <>
-                  {/* Variable inputs */}
                   {(selectedTemplate.variables || []).length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Template Variables</p>
+                    <div className="space-y-2 pt-2 border-t border-[#E7E5E4]">
+                      <p className="text-[11px] font-semibold text-[#78716C] uppercase tracking-wider">
+                        Template Variables
+                      </p>
                       {selectedTemplate.variables.map((v) => (
-                        <div key={v}>
-                          <label className="block text-xs text-gray-300 mb-0.5">{`{{${v}}}`}</label>
-                          <input
-                            type="text"
-                            required
-                            value={templateVars[v] || ''}
-                            onChange={(e) => setTemplateVars({ ...templateVars, [v]: e.target.value })}
-                            placeholder={`Value for ${v}`}
-                            className="w-full px-3 py-1.5 rounded-lg bg-gray-800 border border-gray-700 text-white text-sm"
-                          />
-                        </div>
+                        <Input
+                          key={v}
+                          id={`var-${v}`}
+                          label={`{{${v}}}`}
+                          type="text"
+                          required
+                          value={templateVars[v] || ''}
+                          onChange={(e) =>
+                            setTemplateVars({
+                              ...templateVars,
+                              [v]: e.target.value,
+                            })
+                          }
+                          placeholder={`Value for ${v}`}
+                        />
                       ))}
                     </div>
                   )}
 
-                  {/* Live Preview */}
-                  <div className="p-3 bg-gray-900 rounded-lg border border-gray-800 space-y-2">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Live Preview</p>
+                  {/* Live Preview Box */}
+                  <div className="p-3 bg-white rounded-[6px] border border-[#E7E5E4] space-y-1.5">
+                    <p className="text-[11px] font-semibold text-[#78716C] uppercase tracking-wider flex items-center gap-1">
+                      <Eye className="w-3.5 h-3.5" strokeWidth={1.5} />
+                      Live Render Preview
+                    </p>
                     {tab === 'email' && selectedTemplate.subject_template && (
                       <div>
-                        <span className="text-xs text-gray-500 block">Subject:</span>
-                        <p className="text-sm font-medium text-gray-200">
-                          {renderPreview(selectedTemplate.subject_template, templateVars)}
+                        <span className="text-[11px] text-[#78716C]">
+                          Subject:
+                        </span>
+                        <p className="text-xs font-medium text-[#1C1917]">
+                          {renderPreview(
+                            selectedTemplate.subject_template,
+                            templateVars
+                          )}
                         </p>
                       </div>
                     )}
                     <div>
-                      <span className="text-xs text-gray-500 block">Body:</span>
-                      <pre className="text-xs font-mono text-gray-300 whitespace-pre-wrap">
-                        {renderPreview(selectedTemplate.body_template, templateVars)}
+                      <span className="text-[11px] text-[#78716C]">Body:</span>
+                      <pre className="text-xs font-mono text-[#1C1917] whitespace-pre-wrap mt-0.5">
+                        {renderPreview(
+                          selectedTemplate.body_template,
+                          templateVars
+                        )}
                       </pre>
                     </div>
                   </div>
@@ -403,39 +460,49 @@ export default function SendPage() {
             </div>
           )}
 
-          {/* Direct Subject and Body (when NOT using template) */}
+          {/* Direct Subject & Body */}
           {tab === 'email' && !useTemplate && (
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1" htmlFor="subject">
-                Subject
-              </label>
-              <input
-                id="subject"
-                type="text"
-                required
-                maxLength={255}
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                placeholder="Notification Subject"
-                className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
-              />
-            </div>
+            <Input
+              id="direct-subject"
+              label="Subject *"
+              type="text"
+              required
+              maxLength={255}
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              placeholder="e.g. Account Security Notification"
+            />
           )}
 
-          {((tab === 'email' && !useTemplate) || (tab === 'sms' && !useTemplate) || tab === 'webhook') && (
-            <div>
-              <div className="flex justify-between items-center mb-1">
-                <label className="block text-sm font-medium text-gray-300" htmlFor="body">
-                  {tab === 'email' ? 'Body' : tab === 'sms' ? 'Message' : 'Payload Body'}
+          {((tab === 'email' && !useTemplate) ||
+            (tab === 'sms' && !useTemplate) ||
+            tab === 'webhook') && (
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center">
+                <label
+                  htmlFor="direct-body"
+                  className="block text-xs font-medium text-[#1C1917]"
+                >
+                  {tab === 'email'
+                    ? 'Body *'
+                    : tab === 'sms'
+                    ? 'Message Content *'
+                    : 'Payload Body *'}
                 </label>
                 {tab === 'sms' && (
-                  <span className={`text-xs ${body.length > 1600 ? 'text-red-400' : 'text-gray-400'}`}>
+                  <span
+                    className={`text-[11px] ${
+                      body.length > 1600
+                        ? 'text-[#B91C1C] font-semibold'
+                        : 'text-[#78716C]'
+                    }`}
+                  >
                     {body.length} / 1600
                   </span>
                 )}
               </div>
               <textarea
-                id="body"
+                id="direct-body"
                 required
                 rows={4}
                 maxLength={tab === 'sms' ? 1600 : undefined}
@@ -443,86 +510,109 @@ export default function SendPage() {
                 onChange={(e) => setBody(e.target.value)}
                 placeholder={
                   tab === 'email'
-                    ? 'Enter email body content...'
+                    ? 'Enter notification message...'
                     : tab === 'sms'
-                    ? 'Enter SMS message content...'
-                    : 'Enter message payload to post to webhook...'
+                    ? 'Enter SMS text...'
+                    : 'Enter JSON or text payload...'
                 }
-                className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
+                className="w-full text-xs px-3 py-2 rounded-[6px] bg-white border border-[#E7E5E4] text-[#1C1917] placeholder:text-[#A8A29E] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
               />
             </div>
           )}
 
-          {/* Options: Priority, Category, Schedule */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-gray-800">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Priority</label>
-              <select
-                value={priority}
-                onChange={(e) => setPriority(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white text-sm"
-              >
-                <option value="high">High</option>
-                <option value="normal">Normal</option>
-                <option value="low">Low</option>
-              </select>
-            </div>
+          {/* Priority & Category (Segmented Control) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-[#E7E5E4]">
+            <Select
+              id="send-priority"
+              label="Priority Level"
+              value={priority}
+              onChange={(e) => setPriority(e.target.value)}
+            >
+              <option value="high">High (Immediate)</option>
+              <option value="normal">Normal (Standard)</option>
+              <option value="low">Low (Bulk Background)</option>
+            </Select>
 
             {tab !== 'webhook' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">Category</label>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white text-sm"
-                >
-                  <option value="transactional">Transactional</option>
-                  <option value="marketing">Marketing</option>
-                </select>
-                <p className="text-xs text-gray-500 mt-1">
-                  marketing respects unsubscribes and adds an unsubscribe link; transactional is for OTPs and receipts
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-[#1C1917]">
+                  Category
+                </label>
+                {/* Segmented Control */}
+                <div className="inline-flex rounded-[6px] border border-[#E7E5E4] bg-[#FAFAF9] p-0.5 w-full">
+                  <button
+                    type="button"
+                    onClick={() => setCategory('transactional')}
+                    className={`flex-1 py-1.5 text-xs font-medium rounded-[4px] transition-colors cursor-pointer ${
+                      category === 'transactional'
+                        ? 'bg-white text-[#1C1917] shadow-xs'
+                        : 'text-[#78716C] hover:text-[#1C1917]'
+                    }`}
+                  >
+                    Transactional
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCategory('marketing')}
+                    className={`flex-1 py-1.5 text-xs font-medium rounded-[4px] transition-colors cursor-pointer ${
+                      category === 'marketing'
+                        ? 'bg-white text-[#1C1917] shadow-xs'
+                        : 'text-[#78716C] hover:text-[#1C1917]'
+                    }`}
+                  >
+                    Marketing
+                  </button>
+                </div>
+                <p className="text-[11px] text-[#78716C]">
+                  Marketing automatically includes unsubscribe headers and links.
                 </p>
               </div>
             )}
           </div>
 
-          {/* Scheduling option */}
+          {/* Scheduling option (Switch) */}
           {tab !== 'webhook' && (
-            <div className="space-y-2 pt-2 border-t border-gray-800">
-              <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-300">
-                <input
-                  type="checkbox"
-                  checked={isScheduled}
-                  onChange={(e) => setIsScheduled(e.target.checked)}
-                  className="rounded bg-gray-800 border-gray-700 text-blue-600 focus:ring-0"
-                />
-                Schedule delivery
-              </label>
+            <div className="space-y-3 pt-3 border-t border-[#E7E5E4]">
+              <Switch
+                id="toggle-schedule"
+                label="Schedule delivery"
+                description="Queue this notification to dispatch at a future timestamp (up to 30 days)."
+                checked={isScheduled}
+                onChange={setIsScheduled}
+              />
               {isScheduled && (
-                <div>
-                  <input
+                <div className="pl-12 max-w-xs">
+                  <Input
+                    id="schedule-time"
                     type="datetime-local"
                     value={scheduledAtRaw}
                     onChange={(e) => setScheduledAtRaw(e.target.value)}
-                    className="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white text-sm"
                   />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Must be in the future and at most 30 days ahead.
-                  </p>
                 </div>
               )}
             </div>
           )}
 
-          {/* Submit */}
-          <div className="pt-4">
-            <button
+          {/* Submit Action in sticky container */}
+          <div className="pt-4 border-t border-[#E7E5E4] flex justify-end">
+            <Button
               type="submit"
-              disabled={loading || Boolean(validationError)}
-              className="w-full sm:w-auto px-6 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium transition-colors"
+              variant="primary"
+              size="md"
+              loading={loading}
+              disabled={Boolean(validationError)}
+              icon={Send}
             >
-              {loading ? 'Sending...' : `Send ${tab === 'email' ? 'Email' : tab === 'sms' ? 'SMS' : 'Webhook'}`}
-            </button>
+              {loading
+                ? 'Dispatching…'
+                : `Send ${
+                    tab === 'email'
+                      ? 'Email'
+                      : tab === 'sms'
+                      ? 'SMS'
+                      : 'Webhook'
+                  }`}
+            </Button>
           </div>
         </form>
       </div>

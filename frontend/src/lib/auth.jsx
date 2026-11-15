@@ -72,10 +72,10 @@ export function AuthProvider({ children }) {
   // -------------------------------------------------------------------------
   function loginWithResponse(body) {
     const t = body.access_token;
-    const u = body.user;
-    const ws = body.workspace;
-    const wsList = body.workspaces ?? [];
-    const sa = body.is_superadmin ?? false;
+    const u = body.user ?? readSession('user', null);
+    const ws = body.workspace ?? readSession('workspace', null);
+    const wsList = body.workspaces ?? readSession('workspaces', []);
+    const sa = body.is_superadmin ?? readSession('isSuperadmin', false);
     sessionStorage.setItem('token', t);
     writeSession('user', u);
     writeSession('workspace', ws);

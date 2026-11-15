@@ -1,12 +1,28 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { getNotification, getNotificationTimeline, retryNotification, cancelNotification, ApiError } from '../lib/api';
+import {
+  ArrowLeft,
+  Copy,
+  Check,
+  RotateCw,
+  XCircle,
+  AlertCircle,
+} from 'lucide-react';
+import {
+  getNotification,
+  getNotificationTimeline,
+  retryNotification,
+  cancelNotification,
+  ApiError,
+} from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { IN_PROGRESS_STATUSES } from '../lib/constants';
 import StatusBadge from '../components/StatusBadge';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ErrorBanner from '../components/ErrorBanner';
 import Loading from '../components/Loading';
+import Button from '../components/ui/Button';
+import Card from '../components/ui/Card';
 
 function fmt(d) {
   if (!d) return '—';
@@ -26,7 +42,7 @@ export default function NotificationDetailPage() {
   const [copied, setCopied] = useState(false);
 
   // Dialog state
-  const [dialogConfig, setDialogConfig] = useState(null); // { type: 'retry' | 'cancel', title, message }
+  const [dialogConfig, setDialogConfig] = useState(null);
 
   const reqId = useRef(0);
   const pollTimer = useRef(null);
@@ -98,26 +114,37 @@ export default function NotificationDetailPage() {
     }
   };
 
-  if (loading && !notification) return <Loading text="Loading notification..." />;
+  if (loading && !notification)
+    return <Loading text="Loading notification details…" />;
 
   if (error) {
     if (error instanceof ApiError && error.status === 404) {
       return (
         <div className="space-y-4">
-          <Link to="/notifications" className="text-sm text-blue-400 hover:underline">
-            &larr; Back to Notifications
+          <Link
+            to="/notifications"
+            className="text-xs text-[#4F46E5] hover:underline flex items-center gap-1 font-medium"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Back to Notifications
           </Link>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center">
-            <h2 className="text-lg font-semibold text-gray-200">Notification not found</h2>
-            <p className="text-sm text-gray-500 mt-2">The requested notification ID does not exist.</p>
+          <div className="bg-white border border-[#E7E5E4] rounded-[8px] p-8 text-center">
+            <h2 className="text-base font-semibold text-[#1C1917]">
+              Notification not found
+            </h2>
+            <p className="text-xs text-[#78716C] mt-1">
+              The requested notification record does not exist or was deleted.
+            </p>
           </div>
         </div>
       );
     }
     return (
       <div className="space-y-4">
-        <Link to="/notifications" className="text-sm text-blue-400 hover:underline">
-          &larr; Back to Notifications
+        <Link
+          to="/notifications"
+          className="text-xs text-[#4F46E5] hover:underline flex items-center gap-1 font-medium"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" /> Back to Notifications
         </Link>
         <ErrorBanner error={error} onRetry={fetchData} />
       </div>
@@ -127,116 +154,159 @@ export default function NotificationDetailPage() {
   if (!notification) return null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-[840px]">
       {/* Top back link */}
       <div>
-        <Link to="/notifications" className="text-sm text-blue-400 hover:underline">
-          &larr; Back to Notifications
+        <Link
+          to="/notifications"
+          className="text-xs text-[#4F46E5] hover:underline flex items-center gap-1.5 font-medium"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          <span>Back to Notifications</span>
         </Link>
       </div>
 
       {actionError && <ErrorBanner error={actionError} />}
 
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-gray-900 border border-gray-800 rounded-xl p-4 md:p-6">
+      {/* Header card */}
+      <div className="bg-white border border-[#E7E5E4] rounded-[8px] p-5 shadow-xs flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-3">
           <StatusBadge status={notification.status} />
-          <span className="font-mono text-sm md:text-base text-gray-200">{notification.id}</span>
-          <button
+          <span className="font-mono text-xs sm:text-sm text-[#1C1917] font-medium">
+            {notification.id}
+          </span>
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={handleCopyId}
-            className="px-2 py-1 text-xs rounded bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700"
+            icon={copied ? Check : Copy}
           >
-            {copied ? 'Copied!' : 'Copy ID'}
-          </button>
+            {copied ? 'Copied' : 'Copy ID'}
+          </Button>
         </div>
 
-        {/* Action buttons */}
+        {/* Actions */}
         {canWrite && (
           <div className="flex items-center gap-2">
             {notification.status === 'failed' && (
-              <button
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={() =>
                   setDialogConfig({
                     type: 'retry',
                     title: 'Retry Notification',
-                    message: 'Are you sure you want to retry sending this notification?',
+                    message:
+                      'Are you sure you want to retry sending this notification?',
                   })
                 }
-                className="px-3 py-1.5 text-sm font-medium rounded-lg bg-blue-600 hover:bg-blue-500 text-white"
+                icon={RotateCw}
               >
-                Retry
-              </button>
+                Retry Dispatch
+              </Button>
             )}
             {notification.status === 'scheduled' && (
-              <button
+              <Button
+                variant="destructive"
+                size="sm"
                 onClick={() =>
                   setDialogConfig({
                     type: 'cancel',
                     title: 'Cancel Notification',
-                    message: 'Are you sure you want to cancel this scheduled notification?',
+                    message:
+                      'Are you sure you want to cancel this scheduled notification?',
                   })
                 }
-                className="px-3 py-1.5 text-sm font-medium rounded-lg bg-red-600 hover:bg-red-500 text-white"
+                icon={XCircle}
               >
-                Cancel
-              </button>
+                Cancel Schedule
+              </Button>
             )}
           </div>
         )}
       </div>
 
-      {/* Error banner if notification has error */}
+      {/* Error alert if failure occurred */}
       {notification.error_message && (
-        <div className="bg-red-950/40 border border-red-800 rounded-xl p-4 text-red-300 text-sm">
-          <p className="font-semibold text-xs uppercase tracking-wider mb-1 text-red-400">Error</p>
+        <div className="bg-[#FEF2F2] border border-[#FECACA] rounded-[8px] p-4 text-xs text-[#B91C1C]">
+          <p className="font-semibold uppercase tracking-wider mb-1 flex items-center gap-1.5">
+            <AlertCircle className="w-4 h-4" /> Dispatch Failure
+          </p>
           <p className="font-mono break-all">{notification.error_message}</p>
         </div>
       )}
 
       {/* Details Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Destination</h3>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Destination */}
+        <div className="bg-white border border-[#E7E5E4] rounded-[8px] p-4 space-y-3">
+          <h3 className="text-[11px] font-semibold text-[#78716C] uppercase tracking-wider">
+            Destination
+          </h3>
           <div>
-            <span className="text-xs text-gray-500 block">Channel</span>
-            <span className="text-sm font-medium capitalize">{notification.channel}</span>
+            <span className="text-[11px] text-[#78716C] block">Channel</span>
+            <span className="text-xs font-medium text-[#1C1917] capitalize">
+              {notification.channel}
+            </span>
           </div>
           <div>
-            <span className="text-xs text-gray-500 block">Recipient</span>
-            <span className="text-sm font-mono break-all">{notification.recipient}</span>
+            <span className="text-[11px] text-[#78716C] block">Recipient</span>
+            <span className="text-xs font-mono text-[#1C1917] break-all">
+              {notification.recipient}
+            </span>
           </div>
           {notification.subject && (
             <div>
-              <span className="text-xs text-gray-500 block">Subject</span>
-              <span className="text-sm font-medium">{notification.subject}</span>
+              <span className="text-[11px] text-[#78716C] block">Subject</span>
+              <span className="text-xs font-medium text-[#1C1917]">
+                {notification.subject}
+              </span>
             </div>
           )}
         </div>
 
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Delivery Details</h3>
+        {/* Delivery Details */}
+        <div className="bg-white border border-[#E7E5E4] rounded-[8px] p-4 space-y-3">
+          <h3 className="text-[11px] font-semibold text-[#78716C] uppercase tracking-wider">
+            Delivery Details
+          </h3>
           <div>
-            <span className="text-xs text-gray-500 block">Provider</span>
-            <span className="text-sm font-medium">{notification.provider || '—'}</span>
+            <span className="text-[11px] text-[#78716C] block">Provider</span>
+            <span className="text-xs font-medium text-[#1C1917] capitalize">
+              {notification.provider || '—'}
+            </span>
           </div>
           <div>
-            <span className="text-xs text-gray-500 block">Provider Message ID</span>
-            <span className="text-sm font-mono break-all">{notification.provider_message_id || '—'}</span>
+            <span className="text-[11px] text-[#78716C] block">
+              Provider Message ID
+            </span>
+            <span className="text-xs font-mono text-[#1C1917] break-all">
+              {notification.provider_message_id || '—'}
+            </span>
           </div>
           <div>
-            <span className="text-xs text-gray-500 block">Attempts</span>
-            <span className="text-sm font-medium">{notification.attempt_count} / {notification.max_attempts}</span>
+            <span className="text-[11px] text-[#78716C] block">Attempts</span>
+            <span className="text-xs font-medium text-[#1C1917]">
+              {notification.attempt_count} / {notification.max_attempts}
+            </span>
           </div>
           <div>
-            <span className="text-xs text-gray-500 block">Priority / Category</span>
-            <span className="text-sm font-medium">{notification.priority ?? '—'} / {notification.category || '—'}</span>
+            <span className="text-[11px] text-[#78716C] block">
+              Priority / Category
+            </span>
+            <span className="text-xs font-medium text-[#1C1917] capitalize">
+              {notification.priority ?? 'normal'} /{' '}
+              {notification.category || 'transactional'}
+            </span>
           </div>
           {notification.batch_id && (
             <div>
-              <span className="text-xs text-gray-500 block">Batch</span>
+              <span className="text-[11px] text-[#78716C] block">Batch ID</span>
               <Link
-                to={`/notifications?batch_id=${encodeURIComponent(notification.batch_id)}`}
-                className="text-sm font-mono text-blue-400 hover:underline"
+                to={`/notifications?batch_id=${encodeURIComponent(
+                  notification.batch_id
+                )}`}
+                className="text-xs font-mono text-[#4F46E5] hover:underline"
               >
                 {notification.batch_id}
               </Link>
@@ -244,74 +314,116 @@ export default function NotificationDetailPage() {
           )}
         </div>
 
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Timestamps</h3>
+        {/* Timestamps */}
+        <div className="bg-white border border-[#E7E5E4] rounded-[8px] p-4 space-y-3">
+          <h3 className="text-[11px] font-semibold text-[#78716C] uppercase tracking-wider">
+            Timestamps
+          </h3>
           <div>
-            <span className="text-xs text-gray-500 block">Created</span>
-            <span className="text-sm">{fmt(notification.created_at)}</span>
+            <span className="text-[11px] text-[#78716C] block">Created</span>
+            <span className="text-xs text-[#1C1917]">
+              {fmt(notification.created_at)}
+            </span>
           </div>
           <div>
-            <span className="text-xs text-gray-500 block">Scheduled</span>
-            <span className="text-sm">{fmt(notification.scheduled_at)}</span>
+            <span className="text-[11px] text-[#78716C] block">Scheduled</span>
+            <span className="text-xs text-[#1C1917]">
+              {fmt(notification.scheduled_at)}
+            </span>
           </div>
           <div>
-            <span className="text-xs text-gray-500 block">Sent</span>
-            <span className="text-sm">{fmt(notification.sent_at)}</span>
+            <span className="text-[11px] text-[#78716C] block">Sent</span>
+            <span className="text-xs text-[#1C1917]">
+              {fmt(notification.sent_at)}
+            </span>
           </div>
           <div>
-            <span className="text-xs text-gray-500 block">Delivered</span>
-            <span className="text-sm">{fmt(notification.delivered_at)}</span>
+            <span className="text-[11px] text-[#78716C] block">Delivered</span>
+            <span className="text-xs text-[#1C1917]">
+              {fmt(notification.delivered_at)}
+            </span>
           </div>
           <div>
-            <span className="text-xs text-gray-500 block">Updated</span>
-            <span className="text-sm">{fmt(notification.updated_at)}</span>
+            <span className="text-[11px] text-[#78716C] block">Last Updated</span>
+            <span className="text-xs text-[#1C1917]">
+              {fmt(notification.updated_at)}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Body */}
+      {/* Message Body */}
       {notification.body && (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Message Body</h3>
-          <pre className="bg-gray-950 p-4 rounded-lg text-sm font-mono text-gray-300 overflow-x-auto whitespace-pre-wrap max-h-80">
+        <Card title="Message Content">
+          <pre className="bg-[#FAFAF9] border border-[#E7E5E4] p-4 rounded-[6px] text-xs font-mono text-[#1C1917] overflow-x-auto whitespace-pre-wrap max-h-80">
             {notification.body}
           </pre>
-        </div>
+        </Card>
       )}
 
-      {/* Timeline */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 md:p-6">
-        <h3 className="text-sm font-semibold text-gray-300 mb-4">Delivery Timeline</h3>
+      {/* Delivery Timeline */}
+      <div className="bg-white border border-[#E7E5E4] rounded-[8px] p-5 shadow-xs">
+        <h3 className="text-sm font-semibold text-[#1C1917] mb-4">
+          Delivery Timeline
+        </h3>
         {timeline.length === 0 ? (
-          <p className="text-sm text-gray-500">No delivery attempts recorded yet.</p>
+          <p className="text-xs text-[#78716C]">
+            No delivery attempt records registered yet.
+          </p>
         ) : (
           <div className="space-y-4">
             {timeline.map((item, index) => {
-              const isSuccess = item.outcome === 'success' || item.status === 'delivered' || item.status === 'sent';
-              const isFailure = item.outcome === 'failure' || item.status === 'failed' || item.status === 'bounced';
-              const dotColor = isSuccess ? 'bg-emerald-500' : isFailure ? 'bg-red-500' : 'bg-amber-500';
+              const isSuccess =
+                item.outcome === 'success' ||
+                item.status === 'delivered' ||
+                item.status === 'sent';
+              const isFailure =
+                item.outcome === 'failure' ||
+                item.status === 'failed' ||
+                item.status === 'bounced';
+              const dotColor = isSuccess
+                ? 'bg-[#15803D]'
+                : isFailure
+                ? 'bg-[#B91C1C]'
+                : 'bg-[#A16207]';
 
               return (
-                <div key={item.id || index} className="flex items-start gap-3 border-l-2 border-gray-800 pl-4 py-1 relative">
-                  <span className={`absolute -left-[5px] top-2.5 h-2 w-2 rounded-full ${dotColor}`} />
+                <div
+                  key={item.id || index}
+                  className="flex items-start gap-3 border-l-2 border-[#E7E5E4] pl-4 py-1 relative"
+                >
+                  <span
+                    className={`absolute -left-[5px] top-2 h-2 w-2 rounded-full ${dotColor}`}
+                  />
                   <div className="flex-1 space-y-1">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-sm font-medium capitalize text-gray-200">
-                        Attempt #{item.attempt_number ?? (index + 1)}: {item.outcome || item.status}
+                      <span className="text-xs font-semibold text-[#1C1917] capitalize">
+                        Attempt #{item.attempt_number ?? index + 1}:{' '}
+                        {item.outcome || item.status}
                       </span>
-                      <span className="text-xs text-gray-500">
+                      <span className="text-[11px] text-[#78716C]">
                         {fmt(item.created_at || item.attempted_at)}
                       </span>
                     </div>
-                    <div className="flex flex-wrap gap-4 text-xs text-gray-400">
-                      {item.provider && <span>Provider: <strong className="text-gray-300">{item.provider}</strong></span>}
-                      {item.duration_ms !== undefined && item.duration_ms !== null && (
-                        <span>Duration: {item.duration_ms} ms</span>
+                    <div className="flex flex-wrap gap-4 text-xs text-[#78716C]">
+                      {item.provider && (
+                        <span>
+                          Provider:{' '}
+                          <strong className="text-[#1C1917] font-medium capitalize">
+                            {item.provider}
+                          </strong>
+                        </span>
                       )}
-                      {item.status_code && <span>HTTP Status: {item.status_code}</span>}
+                      {item.duration_ms !== undefined &&
+                        item.duration_ms !== null && (
+                          <span>Duration: {item.duration_ms} ms</span>
+                        )}
+                      {item.status_code && (
+                        <span>Status code: {item.status_code}</span>
+                      )}
                     </div>
                     {item.error_message && (
-                      <p className="text-xs text-red-400 font-mono mt-1 break-all bg-red-950/20 p-2 rounded border border-red-900/30">
+                      <p className="text-xs text-[#B91C1C] font-mono mt-1 break-all bg-[#FEF2F2] p-2 rounded-[4px] border border-[#FECACA]">
                         {item.error_message}
                       </p>
                     )}
@@ -323,17 +435,18 @@ export default function NotificationDetailPage() {
         )}
       </div>
 
-      {/* Confirmation Dialog */}
       <ConfirmDialog
         open={Boolean(dialogConfig)}
+        destructive={dialogConfig?.type === 'cancel'}
         title={dialogConfig?.title || ''}
         message={dialogConfig?.message || ''}
         onConfirm={handleConfirmAction}
         onCancel={() => setDialogConfig(null)}
         loading={actionLoading}
-        confirmLabel={dialogConfig?.type === 'retry' ? 'Retry' : 'Cancel Notification'}
+        confirmLabel={
+          dialogConfig?.type === 'retry' ? 'Retry Dispatch' : 'Cancel Delivery'
+        }
       />
     </div>
   );
 }
-

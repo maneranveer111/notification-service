@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     
     brevo_api_key: str | None = None
     brevo_from_email: str | None = None
+    brevo_from_name: str | None = None
 
     twilio_account_sid: str | None = None
     twilio_auth_token: str | None = None

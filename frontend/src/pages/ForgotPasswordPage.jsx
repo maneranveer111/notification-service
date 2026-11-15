@@ -3,6 +3,9 @@ import { Link } from 'react-router-dom';
 import { getPublicConfig, apiFetch } from '../lib/api';
 import { describeError } from '../lib/errors';
 import Captcha from '../components/Captcha';
+import Button from '../components/ui/Button';
+import Input from '../components/ui/Input';
+import { AlertCircle, KeyRound } from 'lucide-react';
 
 export default function ForgotPasswordPage() {
   const [config, setConfig] = useState(null);
@@ -27,46 +30,51 @@ export default function ForgotPasswordPage() {
         body: JSON.stringify({ email, captcha_token: captchaToken || undefined }),
       });
     } catch (err) {
-      // Show error only for unexpected failures; network errors, etc.
       const desc = describeError(err);
       setError(desc.title + ': ' + desc.message);
     } finally {
-      // Always show the "we sent a link" message regardless of response
       setDone(true);
       setSubmitting(false);
-      setResetSignal(s => s + 1);
+      setResetSignal((s) => s + 1);
       setCaptchaToken(null);
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md bg-white rounded-xl shadow-md p-8">
-        <h1 className="text-xl font-bold text-gray-900 mb-6">Reset your password</h1>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[#FAFAF9] px-4 py-12">
+      <div className="w-full max-w-[400px] bg-white rounded-[10px] border border-[#E7E5E4] shadow-sm p-8">
+        <div className="flex items-center justify-center w-10 h-10 rounded-[8px] bg-[#EEF2FF] text-[#4F46E5] mb-5">
+          <KeyRound className="w-5 h-5" strokeWidth={1.5} />
+        </div>
+        <h1 className="text-xl font-bold tracking-tight text-[#1C1917] mb-1">Reset your password</h1>
+        <p className="text-xs text-[#78716C] mb-6">
+          Enter your account email to receive a password recovery link.
+        </p>
+
         {error && !done && (
-          <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-            {error}
+          <div className="mb-5 p-3 rounded-[6px] bg-[#FEF2F2] border border-[#FECACA] flex items-start gap-2.5 text-[#B91C1C] text-xs">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" strokeWidth={1.5} />
+            <span>{error}</span>
           </div>
         )}
+
         {done ? (
-          <p className="text-gray-700 text-sm">
-            If an account exists for that email, we sent a reset link.
-          </p>
+          <div className="space-y-4">
+            <div className="p-3 rounded-[6px] bg-[#ECFDF5] border border-[#A7F3D0] text-[#047857] text-xs leading-relaxed">
+              If an account exists for that email, we sent a password reset link. Please check your inbox and spam folder.
+            </div>
+          </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email address
-              </label>
-              <input
-                id="email"
-                type="email"
-                required
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
+            <Input
+              label="Email address"
+              id="email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="name@company.com"
+            />
             {config?.turnstile_site_key && (
               <Captcha
                 siteKey={config.turnstile_site_key}
@@ -74,18 +82,17 @@ export default function ForgotPasswordPage() {
                 resetSignal={resetSignal}
               />
             )}
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full py-2 px-4 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
-            >
-              {submitting ? 'Sending...' : 'Send reset link'}
-            </button>
+            <Button type="submit" loading={submitting} className="w-full mt-2">
+              Send reset link
+            </Button>
           </form>
         )}
-        <Link to="/login" className="mt-4 block text-sm text-indigo-600 hover:underline">
-          Back to login
-        </Link>
+
+        <div className="mt-6 pt-5 border-t border-[#E7E5E4] text-center">
+          <Link to="/login" className="text-xs font-medium text-[#4F46E5] hover:text-[#4338CA] transition-colors">
+            Back to login
+          </Link>
+        </div>
       </div>
     </div>
   );

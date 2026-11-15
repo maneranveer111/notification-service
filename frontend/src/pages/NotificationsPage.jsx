@@ -1,5 +1,11 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import {
+  Bell,
+  RotateCw,
+  Search,
+  X,
+} from 'lucide-react';
 import { listNotifications } from '../lib/api';
 import { STATUSES, CHANNELS } from '../lib/constants';
 import StatusBadge from '../components/StatusBadge';
@@ -7,6 +13,8 @@ import Pagination from '../components/Pagination';
 import ErrorBanner from '../components/ErrorBanner';
 import Loading from '../components/Loading';
 import EmptyState from '../components/EmptyState';
+import Button from '../components/ui/Button';
+import Badge from '../components/ui/Badge';
 
 function useDebounce(value, ms) {
   const [debounced, setDebounced] = useState(value);
@@ -42,7 +50,6 @@ export default function NotificationsPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [lastUpdated, setLastUpdated] = useState(null);
   const reqId = useRef(0);
   const intervalRef = useRef(null);
 
@@ -61,7 +68,6 @@ export default function NotificationsPage() {
       setData(result.data);
       setTotal(result.total);
       setError(null);
-      setLastUpdated(new Date());
     } catch (e) {
       if (id !== reqId.current) return;
       setError(e);
@@ -76,7 +82,10 @@ export default function NotificationsPage() {
   }, [fetchData]);
 
   useEffect(() => {
-    if (!autoRefresh) { clearInterval(intervalRef.current); return; }
+    if (!autoRefresh) {
+      clearInterval(intervalRef.current);
+      return;
+    }
     clearInterval(intervalRef.current);
     intervalRef.current = setInterval(() => {
       if (!document.hidden) fetchData();
@@ -96,124 +105,193 @@ export default function NotificationsPage() {
     setParams(next, { replace: true });
   }, [status, channel, recipient, batchId, page, pageSize, setParams]);
 
-  function resetPage() { setPage(1); }
+  function resetPage() {
+    setPage(1);
+  }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-bold">Notifications</h1>
-        <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1.5 text-sm text-gray-400">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-semibold text-[#1C1917] tracking-tight">
+            Notifications
+          </h1>
+          <p className="text-xs sm:text-sm text-[#78716C] mt-0.5">
+            Log of dispatched, scheduled, and retried messages across all channels.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-xs text-[#78716C] cursor-pointer select-none">
             <input
               type="checkbox"
               checked={autoRefresh}
               onChange={(e) => setAutoRefresh(e.target.checked)}
-              className="rounded"
+              className="rounded border-[#E7E5E4] text-[#4F46E5] focus:ring-0"
             />
             Auto-refresh
           </label>
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={fetchData}
-            className="px-3 py-1.5 text-sm rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300"
+            icon={RotateCw}
           >
             Refresh
-          </button>
+          </Button>
         </div>
       </div>
 
-      {lastUpdated && (
-        <p className="text-xs text-gray-500">Last updated: {lastUpdated.toLocaleTimeString()}</p>
-      )}
-
-      {/* Batch chip */}
+      {/* Batch filter active badge */}
       {batchId && (
         <div className="flex items-center gap-2">
-          <span className="text-xs bg-blue-900/30 border border-blue-700 text-blue-300 px-3 py-1 rounded-full">
-            Batch: {batchId}
-          </span>
-          <button
-            onClick={() => { setParams({}); setPage(1); }}
-            className="text-xs text-gray-500 hover:text-gray-300"
-          >
-            ✕ Clear
-          </button>
+          <Badge variant="accent" size="sm">
+            <span>Batch: {batchId}</span>
+            <button
+              onClick={() => {
+                setParams({});
+                setPage(1);
+              }}
+              className="ml-1 hover:text-[#1C1917]"
+              title="Clear batch filter"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </Badge>
         </div>
       )}
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3">
-        <select
-          value={status}
-          onChange={(e) => { setStatus(e.target.value); resetPage(); }}
-          className="bg-gray-800 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-200"
-        >
-          <option value="">All statuses</option>
-          {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select
-          value={channel}
-          onChange={(e) => { setChannel(e.target.value); resetPage(); }}
-          className="bg-gray-800 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-200"
-        >
-          <option value="">All channels</option>
-          {CHANNELS.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <input
-          type="text"
-          value={recipientRaw}
-          onChange={(e) => { setRecipientRaw(e.target.value); resetPage(); }}
-          placeholder="Filter by recipient…"
-          className="bg-gray-800 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-200 min-w-48"
-        />
+      {/* Filter Controls Row */}
+      <div className="flex flex-wrap items-center gap-3 bg-white p-3 rounded-[8px] border border-[#E7E5E4] shadow-xs">
+        <div className="w-40">
+          <select
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value);
+              resetPage();
+            }}
+            className="w-full bg-[#FAFAF9] border border-[#E7E5E4] rounded-[6px] px-2.5 py-1.5 text-xs text-[#1C1917] focus:outline-none focus:border-[#4F46E5] capitalize"
+          >
+            <option value="">All Statuses</option>
+            {STATUSES.map((s) => (
+              <option key={s} value={s} className="capitalize">
+                {s}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="w-40">
+          <select
+            value={channel}
+            onChange={(e) => {
+              setChannel(e.target.value);
+              resetPage();
+            }}
+            className="w-full bg-[#FAFAF9] border border-[#E7E5E4] rounded-[6px] px-2.5 py-1.5 text-xs text-[#1C1917] focus:outline-none focus:border-[#4F46E5] capitalize"
+          >
+            <option value="">All Channels</option>
+            {CHANNELS.map((c) => (
+              <option key={c} value={c} className="capitalize">
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex-1 min-w-[200px] relative">
+          <input
+            type="text"
+            value={recipientRaw}
+            onChange={(e) => {
+              setRecipientRaw(e.target.value);
+              resetPage();
+            }}
+            placeholder="Search recipient address or phone…"
+            className="w-full bg-[#FAFAF9] border border-[#E7E5E4] rounded-[6px] pl-8 pr-3 py-1.5 text-xs text-[#1C1917] placeholder:text-[#A8A29E] focus:outline-none focus:border-[#4F46E5]"
+          />
+          <Search className="w-3.5 h-3.5 text-[#78716C] absolute left-2.5 top-1/2 -translate-y-1/2" />
+        </div>
       </div>
 
-      <ErrorBanner error={error} onRetry={fetchData} />
+      {error && <ErrorBanner error={error} onRetry={fetchData} />}
 
       {loading && data.length === 0 ? (
-        <Loading />
+        <Loading text="Loading notifications…" />
       ) : data.length === 0 ? (
-        <EmptyState message="No notifications match your filters." />
+        <EmptyState
+          icon={Bell}
+          title="No notifications match"
+          message="No notification events found for the selected criteria."
+        />
       ) : (
-        <>
-          <div className="overflow-x-auto rounded-xl border border-gray-800">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-900 text-gray-400 text-left">
+        <div className="bg-white border border-[#E7E5E4] rounded-[8px] overflow-hidden shadow-xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs min-w-[700px]">
+              <thead className="bg-[#FAFAF9] border-b border-[#E7E5E4] text-[11px] font-semibold text-[#78716C] uppercase tracking-wider">
                 <tr>
-                  {['Created', 'Channel', 'Recipient', 'Status', 'Attempts', 'Provider', 'Priority'].map((h) => (
-                    <th key={h} className="px-4 py-3 font-medium whitespace-nowrap">{h}</th>
-                  ))}
+                  <th className="px-5 py-3">Created</th>
+                  <th className="px-5 py-3">Channel</th>
+                  <th className="px-5 py-3">Recipient</th>
+                  <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3">Attempts</th>
+                  <th className="px-5 py-3">Provider</th>
+                  <th className="px-5 py-3">Priority</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-800">
+              <tbody className="divide-y divide-[#E7E5E4]">
                 {data.map((n) => (
                   <tr
                     key={n.id}
                     onClick={() => navigate(`/notifications/${n.id}`)}
-                    className="bg-gray-950 hover:bg-gray-900 cursor-pointer transition-colors"
+                    className="hover:bg-[#FAFAF9]/60 cursor-pointer transition-colors h-[44px]"
                   >
-                    <td className="px-4 py-3 whitespace-nowrap text-gray-400 text-xs">{fmt(n.created_at)}</td>
-                    <td className="px-4 py-3 capitalize">{n.channel}</td>
-                    <td className="px-4 py-3 max-w-[160px] truncate text-gray-300" title={n.recipient}>{n.recipient}</td>
-                    <td className="px-4 py-3"><StatusBadge status={n.status} /></td>
-                    <td className="px-4 py-3 text-gray-400">{n.attempt_count}/{n.max_attempts}</td>
-                    <td className="px-4 py-3 text-gray-400">{n.provider || '—'}</td>
-                    <td className="px-4 py-3 text-gray-400">{n.priority ?? '—'}</td>
+                    <td className="px-5 py-3 text-[#78716C] whitespace-nowrap">
+                      {fmt(n.created_at)}
+                    </td>
+                    <td className="px-5 py-3">
+                      <Badge variant="neutral" size="sm">
+                        <span className="capitalize">{n.channel}</span>
+                      </Badge>
+                    </td>
+                    <td
+                      className="px-5 py-3 font-medium text-[#1C1917] max-w-[180px] truncate"
+                      title={n.recipient}
+                    >
+                      {n.recipient}
+                    </td>
+                    <td className="px-5 py-3">
+                      <StatusBadge status={n.status} />
+                    </td>
+                    <td className="px-5 py-3 text-[#78716C]">
+                      {n.attempt_count}/{n.max_attempts}
+                    </td>
+                    <td className="px-5 py-3 text-[#78716C] capitalize">
+                      {n.provider || '—'}
+                    </td>
+                    <td className="px-5 py-3 text-[#78716C] capitalize">
+                      {n.priority ?? 'normal'}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <Pagination
-            total={total}
-            page={page}
-            pageSize={pageSize}
-            onPageChange={setPage}
-            onPageSizeChange={(s) => { setPageSize(s); setPage(1); }}
-          />
-        </>
+
+          <div className="p-3 bg-white">
+            <Pagination
+              total={total}
+              page={page}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={(s) => {
+                setPageSize(s);
+                setPage(1);
+              }}
+            />
+          </div>
+        </div>
       )}
     </div>
   );
 }
-

@@ -74,6 +74,15 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
         if ws:
             workspace_info = WorkspaceInfo(id=ws.id, name=ws.name, slug=ws.slug, role=membership.role)
 
+    all_memberships = db.execute(
+        select(Membership).where(Membership.user_id == user.id)
+    ).scalars().all()
+    workspaces_list: list[WorkspaceInfo] = []
+    for m in all_memberships:
+        wsi = db.get(Workspace, m.workspace_id)
+        if wsi:
+            workspaces_list.append(WorkspaceInfo(id=wsi.id, name=wsi.name, slug=wsi.slug, role=m.role))
+
     token = create_access_token(
         user_id=user.id,
         email=user.email,
@@ -93,6 +102,7 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
         ),
         workspace=workspace_info,
         is_superadmin=user.is_superadmin,
+        workspaces=workspaces_list,
     )
 
 

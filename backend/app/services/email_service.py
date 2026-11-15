@@ -1,4 +1,5 @@
 import logging
+import re
 import smtplib
 import time
 from collections.abc import Callable
@@ -19,7 +20,35 @@ logger = logging.getLogger(__name__)
 BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
 
 
+def mask_email(email: str | None) -> str:
+    """Mask an email address for safe logging, e.g. 'alice@example.com' -> 'a***e@example.com'."""
+    if not email or "@" not in email:
+        return "***"
+    local, domain = email.split("@", 1)
+    if len(local) <= 1:
+        masked_local = "*"
+    elif len(local) == 2:
+        masked_local = local[0] + "*"
+    else:
+        masked_local = local[0] + "***" + local[-1]
+    return f"{masked_local}@{domain}"
+
+
+def _sanitize_error_str(msg: str | None) -> str:
+    """Remove potential API keys, passwords, or tokens from error strings before logging."""
+    if not msg:
+        return ""
+    # Mask Brevo / SendGrid style api keys
+    msg = re.sub(r'xkeysib-[a-zA-Z0-9]+', '[REDACTED_API_KEY]', msg)
+    # Mask generic tokens or secrets
+    msg = re.sub(r'(api[_-]?key|password|secret|token)[\s:=]+([^\s,;]+)', r'\1=[REDACTED]', msg, flags=re.IGNORECASE)
+    # Mask verification links/tokens: token=...
+    msg = re.sub(r'token=[a-zA-Z0-9_\.-]+', 'token=[REDACTED]', msg)
+    return msg
+
+
 def _send_brevo(recipient: str, subject: str, body: str, config: BrevoConfig) -> str | None:
+    masked_to = mask_email(recipient)
     sender: dict[str, str] = {"email": config.from_email}
     if config.from_name:
         sender["name"] = config.from_name
@@ -37,26 +66,42 @@ def _send_brevo(recipient: str, subject: str, body: str, config: BrevoConfig) ->
         "content-type": "application/json",
     }
 
+    logger.info(
+        "Attempting Brevo API request: recipient=%s, sender=%s, subject=%r",
+        masked_to,
+        config.from_email,
+        subject,
+    )
+
     try:
         response = requests.post(BREVO_API_URL, json=payload, headers=headers, timeout=10)
     except (requests.Timeout, requests.ConnectionError) as exc:
-        raise TransientError(f"Brevo connection error: {exc}") from exc
+        raise TransientError(f"Brevo connection error: {type(exc).__name__}") from exc
     except requests.RequestException as exc:
-        raise TransientError(f"Brevo request error: {exc}") from exc
+        raise TransientError(f"Brevo request error: {type(exc).__name__}") from exc
+
+    logger.info("Brevo API response status=%d for recipient=%s", response.status_code, masked_to)
 
     if response.status_code == 429 or response.status_code >= 500:
-        raise TransientError(f"Brevo server/rate-limit error {response.status_code}: {response.text}")
+        err_text = _sanitize_error_str(response.text[:300])
+        logger.warning("Brevo transient/rate-limit error %d for recipient=%s: %s", response.status_code, masked_to, err_text)
+        raise TransientError(f"Brevo server/rate-limit error {response.status_code}: {err_text}")
     elif response.status_code in (401, 403):
-        raise PermanentError(f"Brevo auth error {response.status_code}: {response.text}", failover=True)
+        err_text = _sanitize_error_str(response.text[:300])
+        logger.error("Brevo auth error %d for recipient=%s: %s", response.status_code, masked_to, err_text)
+        raise PermanentError(f"Brevo auth error {response.status_code}: {err_text}", failover=True)
     elif 400 <= response.status_code < 500:
-        raise PermanentError(f"Brevo client error {response.status_code}: {response.text}", failover=False)
+        err_text = _sanitize_error_str(response.text[:300])
+        logger.error("Brevo client error %d for recipient=%s: %s", response.status_code, masked_to, err_text)
+        raise PermanentError(f"Brevo client error {response.status_code}: {err_text}", failover=False)
 
     try:
         data = response.json()
         message_id = data.get("messageId", None)
-        logger.info(f"Brevo message ID: {message_id}")
+        logger.info("Brevo accepted email: message_id=%s, recipient=%s", message_id, masked_to)
         return message_id
     except Exception:
+        logger.warning("Brevo response json parse error for recipient=%s", masked_to)
         return None
 
 
@@ -133,6 +178,7 @@ def _build_platform_providers() -> list[tuple[str, Any]]:
                     BrevoConfig(
                         api_key=settings.brevo_api_key,
                         from_email=settings.brevo_from_email,
+                        from_name=settings.brevo_from_name,
                     ),
                 )
             )
@@ -155,11 +201,12 @@ def _build_platform_providers() -> list[tuple[str, Any]]:
 
 
 def send_email(
-    recipient: str,
-    subject: str,
-    body: str,
+    recipient: str | None = None,
+    subject: str = "",
+    body: str = "",
     on_attempt: Callable[[str, str, str | None, int, datetime], None] | None = None,
     providers: list[tuple[str, Any]] | None = None,
+    to: str | None = None,
 ) -> tuple[str, str | None]:
     """
     Send an email iterating providers in order.
@@ -168,6 +215,10 @@ def send_email(
     Returns:
         tuple[provider_name, message_id]
     """
+    target_recipient = recipient or to
+    if not target_recipient:
+        raise PermanentError("Recipient email is required")
+
     if providers is None:
         providers = _build_platform_providers()
 
@@ -184,9 +235,9 @@ def send_email(
 
         try:
             if provider_name == "brevo":
-                message_id = _send_brevo(recipient, subject, body, provider_config)
+                message_id = _send_brevo(target_recipient, subject, body, provider_config)
             elif provider_name == "smtp":
-                message_id = _send_smtp(recipient, subject, body, provider_config)
+                message_id = _send_smtp(target_recipient, subject, body, provider_config)
             else:
                 continue
 

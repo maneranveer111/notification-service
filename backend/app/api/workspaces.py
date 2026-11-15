@@ -10,7 +10,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.models.user import User
 from app.models.workspace import Membership, Workspace
-from app.schemas.auth import WorkspaceInfo
+from app.schemas.auth import UserAuthInfo, WorkspaceInfo
 from app.security import Principal, get_principal, get_user_principal, require_admin
 from app.services.jwt_tokens import create_access_token
 from app.services.quota import get_usage
@@ -41,6 +41,9 @@ class TokenSwitchResponse(BaseModel):
     token_type: str = "bearer"
     expires_in: int
     workspace: WorkspaceInfo
+    user: UserAuthInfo | None = None
+    workspaces: list[WorkspaceInfo] = []
+    is_superadmin: bool = False
 
 
 def _require_admin_role(principal: Principal) -> None:
@@ -139,6 +142,20 @@ def switch_workspace(
         user.last_workspace_id = ws.id
         db.commit()
 
+    # Build the full workspaces list so the frontend can update its switcher
+    all_memberships = db.execute(
+        select(Membership).where(Membership.user_id == principal.user_id)
+    ).scalars().all()
+    workspaces_list: list[WorkspaceInfo] = []
+    for m in all_memberships:
+        wsi = db.get(Workspace, m.workspace_id)
+        if wsi:
+            workspaces_list.append(WorkspaceInfo(id=wsi.id, name=wsi.name, slug=wsi.slug, role=m.role))
+
+    user_info: UserAuthInfo | None = None
+    if user:
+        user_info = UserAuthInfo(id=user.id, email=user.email, role=user.role)
+
     token = create_access_token(
         user_id=principal.user_id,
         email=principal.email,
@@ -150,6 +167,9 @@ def switch_workspace(
         token_type="bearer",
         expires_in=settings.jwt_expire_minutes * 60,
         workspace=WorkspaceInfo(id=ws.id, name=ws.name, slug=ws.slug, role=membership.role),
+        user=user_info,
+        workspaces=workspaces_list,
+        is_superadmin=user.is_superadmin if user else False,
     )
 
 

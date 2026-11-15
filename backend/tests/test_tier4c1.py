@@ -189,11 +189,14 @@ def test_h2_client_ip_invalid_falls_back():
 
 
 def test_h3_signup_timing_oracle_hashes_password_on_collision(db):
+    """Timing-oracle mitigation: hash_password must be called even when a collision is found,
+    regardless of whether the existing account is verified or not."""
     user = _make_user(db, email=f"oracle_{uuid.uuid4().hex[:8]}@example.com")
     with patch("app.api.accounts.hash_password", wraps=hash_password) as mock_hash, \
          patch("app.api.accounts.queue_system_email"):
         resp = client.post("/auth/signup", json={"email": user.email, "password": "password123!"})
-    assert resp.status_code == 202
+    # Verified accounts return 409 (correct behavior). Timing mitigation still applies.
+    assert resp.status_code == 409
     assert mock_hash.called
 
 

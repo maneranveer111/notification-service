@@ -1,41 +1,22 @@
 import { useState, useEffect } from 'react';
+import { Check } from 'lucide-react';
 import { apiFetch } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import ErrorBanner from '../../components/ErrorBanner';
-
-// Dark-styled PasswordInput
-function DarkPasswordInput({ id, label, ...rest }) {
-  const [show, setShow] = useState(false);
-  return (
-    <div className="space-y-1">
-      {label && (
-        <label htmlFor={id} className="block text-sm font-medium text-gray-300">
-          {label}
-        </label>
-      )}
-      <div className="relative">
-        <input
-          id={id}
-          type={show ? 'text' : 'password'}
-          className="block w-full rounded-lg bg-gray-800 border border-gray-700 text-white px-3 py-2 pr-10 text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
-          {...rest}
-        />
-        <button
-          type="button"
-          onClick={() => setShow((s) => !s)}
-          className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-200"
-          aria-label={show ? 'Hide password' : 'Show password'}
-        >
-          {show ? '🙈' : '👁'}
-        </button>
-      </div>
-    </div>
-  );
-}
+import PasswordInput from '../../components/PasswordInput';
+import Button from '../../components/ui/Button';
+import Card from '../../components/ui/Card';
+import Badge from '../../components/ui/Badge';
 
 export default function AccountPage() {
-  const { user, workspace, loginWithResponse, refreshWorkspaces, switchWorkspace } = useAuth();
+  const {
+    user,
+    workspace,
+    loginWithResponse,
+    refreshWorkspaces,
+    switchWorkspace,
+  } = useAuth();
 
   // Change password
   const [currentPw, setCurrentPw] = useState('');
@@ -88,7 +69,10 @@ export default function AccountPage() {
     try {
       const body = await apiFetch('/auth/change-password', {
         method: 'POST',
-        body: JSON.stringify({ current_password: currentPw, new_password: newPw }),
+        body: JSON.stringify({
+          current_password: currentPw,
+          new_password: newPw,
+        }),
       });
       loginWithResponse(body);
       setCurrentPw('');
@@ -138,102 +122,143 @@ export default function AccountPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-lg">
-      {/* Email */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-2">
-        <h2 className="text-base font-semibold text-white">Account</h2>
-        <div>
-          <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Email</p>
-          <p className="text-sm text-gray-300">{user?.email}</p>
+    <div className="space-y-6">
+      {/* Account Email Card */}
+      <Card
+        title="Account Profile"
+        subtitle="Your authenticated account identity."
+      >
+        <div className="flex items-center justify-between py-2">
+          <div>
+            <p className="text-xs text-[#78716C]">Email Address</p>
+            <p className="text-sm font-medium text-[#1C1917] mt-0.5">
+              {user?.email}
+            </p>
+          </div>
+          <Badge variant="neutral" size="sm">
+            Verified
+          </Badge>
         </div>
-      </div>
+      </Card>
 
-      {/* Change password */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
-        <h2 className="text-base font-semibold text-white">Change password</h2>
-
+      {/* Change Password Card */}
+      <Card
+        title="Change Password"
+        subtitle="Update your security credentials."
+      >
         {pwSuccess && (
-          <div className="px-4 py-3 rounded-lg bg-green-900/30 border border-green-700 text-green-300 text-sm">
-            ✓ Password updated successfully.
-          </div>
-        )}
-        {pwError && (
-          <div className="px-4 py-3 rounded-lg bg-red-900/30 border border-red-700 text-red-300 text-sm">
-            {pwError}
+          <div className="mb-4 px-3.5 py-2.5 rounded-[6px] bg-[#F0FDF4] border border-[#BBF7D0] text-[#15803D] text-xs flex items-center gap-2">
+            <Check className="w-4 h-4" strokeWidth={2} />
+            <span>Password updated successfully.</span>
           </div>
         )}
 
-        <form onSubmit={handleChangePassword} className="space-y-4">
-          <DarkPasswordInput
+        {pwError && (
+          <div className="mb-4">
+            <ErrorBanner error={pwError} />
+          </div>
+        )}
+
+        <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
+          <PasswordInput
             id="current-pw"
-            label="Current password"
+            label="Current Password"
             value={currentPw}
             onChange={(e) => setCurrentPw(e.target.value)}
             required
             autoComplete="current-password"
           />
-          <DarkPasswordInput
+          <PasswordInput
             id="new-pw"
-            label="New password (min 8 characters)"
+            label="New Password (min 8 characters)"
             value={newPw}
             onChange={(e) => setNewPw(e.target.value)}
             required
             autoComplete="new-password"
           />
-          <DarkPasswordInput
+          <PasswordInput
             id="confirm-pw"
-            label="Confirm new password"
+            label="Confirm New Password"
             value={confirmPw}
             onChange={(e) => setConfirmPw(e.target.value)}
             required
             autoComplete="new-password"
           />
-          <button
+          <Button
             type="submit"
-            disabled={pwLoading || !currentPw || !newPw || !confirmPw}
-            className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium transition-colors"
+            variant="primary"
+            size="sm"
+            loading={pwLoading}
+            disabled={!currentPw || !newPw || !confirmPw}
           >
-            {pwLoading ? 'Updating…' : 'Update password'}
-          </button>
+            Update Password
+          </Button>
         </form>
-      </div>
+      </Card>
 
-      {/* Workspaces */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
-        <h2 className="text-base font-semibold text-white">Your Workspaces</h2>
+      {/* Your Workspaces Card */}
+      <div className="bg-white border border-[#E7E5E4] rounded-[8px] overflow-hidden shadow-xs">
+        <div className="px-5 py-4 border-b border-[#E7E5E4]">
+          <h3 className="text-sm font-semibold text-[#1C1917]">
+            Your Workspaces
+          </h3>
+          <p className="text-xs text-[#78716C] mt-0.5">
+            Workspaces you currently belong to.
+          </p>
+        </div>
 
-        {wsError && <ErrorBanner error={wsError} onRetry={loadWorkspaces} />}
+        {wsError && (
+          <div className="p-4">
+            <ErrorBanner error={wsError} onRetry={loadWorkspaces} />
+          </div>
+        )}
 
         {wsLoading ? (
-          <p className="text-sm text-gray-400">Loading…</p>
+          <div className="p-8 text-center text-xs text-[#78716C]">
+            Loading workspaces…
+          </div>
         ) : workspacesList.length === 0 ? (
-          <p className="text-sm text-gray-400">You have no workspaces. Create one to get started.</p>
+          <div className="p-8 text-center text-xs text-[#78716C]">
+            You have no workspaces.
+          </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-gray-400 uppercase tracking-wide border-b border-gray-800">
-                  <th className="pb-3 pr-4">Name</th>
-                  <th className="pb-3 pr-4">Role</th>
-                  <th className="pb-3">Actions</th>
+            <table className="w-full text-left text-xs min-w-[400px]">
+              <thead className="bg-[#FAFAF9] border-b border-[#E7E5E4] text-[11px] font-semibold text-[#78716C] uppercase tracking-wider">
+                <tr>
+                  <th className="px-5 py-3">Workspace</th>
+                  <th className="px-5 py-3">Role</th>
+                  <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-800">
+              <tbody className="divide-y divide-[#E7E5E4]">
                 {workspacesList.map((ws) => (
-                  <tr key={ws.id} className="text-gray-300">
-                    <td className="py-3 pr-4">
-                      <span className={ws.id === workspace?.id ? 'text-white font-medium' : ''}>{ws.name}</span>
-                      {ws.id === workspace?.id && <span className="ml-2 text-xs text-blue-400">(current)</span>}
+                  <tr
+                    key={ws.id}
+                    className="hover:bg-[#FAFAF9]/60 transition-colors h-[44px]"
+                  >
+                    <td className="px-5 py-3 font-medium text-[#1C1917]">
+                      {ws.name}
+                      {ws.id === workspace?.id && (
+                        <span className="ml-2 text-[10px] text-[#4F46E5] font-semibold">
+                          (Current)
+                        </span>
+                      )}
                     </td>
-                    <td className="py-3 pr-4 capitalize">{ws.role}</td>
-                    <td className="py-3">
-                      <button
-                        type="button"
+                    <td className="px-5 py-3">
+                      <Badge variant="neutral" size="sm">
+                        <span className="capitalize">{ws.role}</span>
+                      </Badge>
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-[#B91C1C] hover:text-[#991B1B] hover:bg-[#FEF2F2]"
                         onClick={() => setLeaveConfirm({ open: true, ws })}
-                        className="px-3 py-1 text-xs rounded bg-red-900 hover:bg-red-800 text-red-200"
                       >
                         Leave
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -243,20 +268,24 @@ export default function AccountPage() {
         )}
 
         {leaveError && (
-          <div className="px-4 py-3 rounded-lg bg-red-900/30 border border-red-700 text-red-300 text-sm">
-            {leaveError}
+          <div className="p-4 border-t border-[#E7E5E4]">
+            <ErrorBanner error={leaveError} />
           </div>
         )}
       </div>
 
       <ConfirmDialog
         open={leaveConfirm.open}
+        destructive
         title={`Leave "${leaveConfirm.ws?.name}"?`}
-        message="You will lose access to this workspace. If you are the last owner, you will be blocked."
-        confirmLabel="Leave workspace"
+        message="You will lose access to this workspace. If you are the last owner, the request will be rejected."
+        confirmLabel="Leave Workspace"
         loading={leaveLoading}
         onConfirm={handleLeave}
-        onCancel={() => { setLeaveConfirm({ open: false, ws: null }); setLeaveError(null); }}
+        onCancel={() => {
+          setLeaveConfirm({ open: false, ws: null });
+          setLeaveError(null);
+        }}
       />
     </div>
   );

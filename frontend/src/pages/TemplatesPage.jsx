@@ -1,11 +1,25 @@
 import { useState, useEffect, useCallback } from 'react';
-import { listTemplates, createTemplate, updateTemplate, deleteTemplate } from '../lib/api';
+import {
+  LayoutTemplate,
+  Plus,
+  X,
+} from 'lucide-react';
+import {
+  listTemplates,
+  createTemplate,
+  updateTemplate,
+  deleteTemplate,
+} from '../lib/api';
 import { useAuth } from '../lib/auth';
 import Pagination from '../components/Pagination';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ErrorBanner from '../components/ErrorBanner';
 import Loading from '../components/Loading';
 import EmptyState from '../components/EmptyState';
+import Button from '../components/ui/Button';
+import Input from '../components/ui/Input';
+import Select from '../components/ui/Select';
+import Badge from '../components/ui/Badge';
 
 function extractVariables(body = '', subject = '') {
   const combined = `${subject} ${body}`;
@@ -101,7 +115,10 @@ export default function TemplatesPage() {
     setFormError(null);
   }
 
-  const detectedVars = extractVariables(formBody, formChannel === 'email' ? formSubject : '');
+  const detectedVars = extractVariables(
+    formBody,
+    formChannel === 'email' ? formSubject : ''
+  );
 
   async function handleSave(e) {
     e.preventDefault();
@@ -128,7 +145,8 @@ export default function TemplatesPage() {
         name: formName.trim(),
         channel: formChannel,
         body_template: formBody,
-        subject_template: formChannel === 'email' ? formSubject.trim() || null : null,
+        subject_template:
+          formChannel === 'email' ? formSubject.trim() || null : null,
       };
 
       if (modalMode === 'create') {
@@ -164,86 +182,127 @@ export default function TemplatesPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-bold">Templates</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-semibold text-[#1C1917] tracking-tight">
+            Templates
+          </h1>
+          <p className="text-xs sm:text-sm text-[#78716C] mt-0.5">
+            Reusable message content with Jinja2 and variable interpolation.
+          </p>
+        </div>
         {canWrite && (
-          <button
+          <Button
+            variant="primary"
+            size="sm"
             onClick={openCreate}
-            className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors"
+            icon={Plus}
           >
-            + New Template
-          </button>
+            New Template
+          </Button>
         )}
       </div>
 
       {error && <ErrorBanner error={error} onRetry={fetchTemplates} />}
 
       {loading && templates.length === 0 ? (
-        <Loading />
+        <Loading text="Loading templates…" />
       ) : templates.length === 0 ? (
-        <EmptyState message="No templates found. Create one to use with notifications." />
+        <EmptyState
+          icon={LayoutTemplate}
+          title="No templates"
+          message="Create your first message template with dynamic variables."
+          action={
+            canWrite && (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={openCreate}
+                icon={Plus}
+              >
+                Create Template
+              </Button>
+            )
+          }
+        />
       ) : (
-        <>
-          <div className="overflow-x-auto rounded-xl border border-gray-800">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-gray-900 text-gray-400">
+        <div className="bg-white border border-[#E7E5E4] rounded-[8px] overflow-hidden shadow-xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs min-w-[700px]">
+              <thead className="bg-[#FAFAF9] border-b border-[#E7E5E4] text-[11px] font-semibold text-[#78716C] uppercase tracking-wider">
                 <tr>
-                  <th className="px-4 py-3">Name</th>
-                  <th className="px-4 py-3">Channel</th>
-                  <th className="px-4 py-3">Variables</th>
-                  <th className="px-4 py-3">Updated</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
+                  <th className="px-5 py-3">Name</th>
+                  <th className="px-5 py-3">Channel</th>
+                  <th className="px-5 py-3">Variables</th>
+                  <th className="px-5 py-3">Updated</th>
+                  <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-800 font-sans">
+              <tbody className="divide-y divide-[#E7E5E4]">
                 {templates.map((tpl) => (
-                  <tr key={tpl.id} className="bg-gray-950 hover:bg-gray-900/60 transition-colors">
-                    <td className="px-4 py-3 font-medium text-white max-w-xs truncate">{tpl.name}</td>
-                    <td className="px-4 py-3 uppercase text-xs font-semibold text-gray-400">
-                      <span className={`px-2 py-0.5 rounded-full border ${tpl.channel === 'email' ? 'border-blue-700 bg-blue-900/30 text-blue-300' : 'border-purple-700 bg-purple-900/30 text-purple-300'}`}>
-                        {tpl.channel}
-                      </span>
+                  <tr
+                    key={tpl.id}
+                    className="hover:bg-[#FAFAF9]/60 transition-colors h-[48px]"
+                  >
+                    <td className="px-5 py-3">
+                      <p className="font-medium text-[#1C1917] truncate max-w-xs">
+                        {tpl.name}
+                      </p>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-5 py-3">
+                      <Badge variant="neutral" size="sm">
+                        <span className="capitalize">{tpl.channel}</span>
+                      </Badge>
+                    </td>
+                    <td className="px-5 py-3">
                       <div className="flex flex-wrap gap-1 max-w-sm">
                         {tpl.variables?.length ? (
                           tpl.variables.map((v) => (
-                            <span key={v} className="px-1.5 py-0.5 bg-gray-800 border border-gray-700 rounded text-xs font-mono text-gray-300">
+                            <span
+                              key={v}
+                              className="px-1.5 py-0.5 bg-[#F5F5F4] border border-[#E7E5E4] rounded-[4px] text-[11px] font-mono text-[#1C1917]"
+                            >
                               {`{{${v}}}`}
                             </span>
                           ))
                         ) : (
-                          <span className="text-gray-500 text-xs">None</span>
+                          <span className="text-[#A8A29E] text-[11px]">None</span>
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
-                      {new Date(tpl.updated_at || tpl.created_at).toLocaleString()}
+                    <td className="px-5 py-3 text-[#78716C]">
+                      {new Date(
+                        tpl.updated_at || tpl.created_at
+                      ).toLocaleDateString()}
                     </td>
-                    <td className="px-4 py-3 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-2">
+                    <td className="px-5 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
                         {canWrite ? (
                           <>
-                            <button
+                            <Button
+                              variant="ghost"
+                              size="sm"
                               onClick={() => openEdit(tpl)}
-                              className="px-2.5 py-1 text-xs rounded bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700"
                             >
                               Edit
-                            </button>
-                            <button
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-[#B91C1C] hover:text-[#991B1B] hover:bg-[#FEF2F2]"
                               onClick={() => setDeleteTarget(tpl)}
-                              className="px-2.5 py-1 text-xs rounded bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800"
                             >
                               Delete
-                            </button>
+                            </Button>
                           </>
                         ) : (
-                          <button
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => openView(tpl)}
-                            className="px-2.5 py-1 text-xs rounded bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700"
                           >
                             View
-                          </button>
+                          </Button>
                         )}
                       </div>
                     </td>
@@ -253,150 +312,160 @@ export default function TemplatesPage() {
             </table>
           </div>
 
-          <Pagination
-            total={total}
-            page={page}
-            pageSize={pageSize}
-            onPageChange={setPage}
-            onPageSizeChange={(s) => {
-              setPageSize(s);
-              setPage(1);
-            }}
-          />
-        </>
+          <div className="p-3 bg-white">
+            <Pagination
+              total={total}
+              page={page}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={(s) => {
+                setPageSize(s);
+                setPage(1);
+              }}
+            />
+          </div>
+        </div>
       )}
 
       {/* Create / Edit / View Modal */}
       {modalMode && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-gray-800 pb-3">
-              <h2 className="text-lg font-bold text-white">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white border border-[#E7E5E4] rounded-[12px] w-full max-w-xl max-h-[90vh] overflow-y-auto p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E7E5E4]">
+              <h2 className="text-base font-semibold text-[#1C1917]">
                 {modalMode === 'create'
                   ? 'New Template'
                   : modalMode === 'edit'
                   ? 'Edit Template'
                   : 'View Template'}
               </h2>
-              <button onClick={closeModal} className="text-gray-400 hover:text-white text-lg">
-                ✕
+              <button
+                type="button"
+                onClick={closeModal}
+                className="p-1 rounded text-[#78716C] hover:text-[#1C1917]"
+              >
+                <X className="w-4 h-4" strokeWidth={1.5} />
               </button>
             </div>
 
             {formError && (
-              <div className="p-3 bg-red-950/40 border border-red-800 rounded-lg text-red-300 text-xs">
+              <div className="px-3.5 py-2.5 rounded-[6px] bg-[#FEF2F2] border border-[#FECACA] text-[#B91C1C] text-xs">
                 {formError}
               </div>
             )}
 
             <form onSubmit={handleSave} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-300 uppercase mb-1">
-                  Template Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  maxLength={100}
-                  disabled={modalMode === 'view'}
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  placeholder="e.g. Welcome Email"
-                  className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white text-sm disabled:opacity-60"
-                />
-              </div>
+              <Input
+                id="template-name"
+                label="Template Name *"
+                type="text"
+                required
+                maxLength={100}
+                disabled={modalMode === 'view'}
+                value={formName}
+                onChange={(e) => setFormName(e.target.value)}
+                placeholder="e.g. Welcome Email"
+              />
 
-              <div>
-                <label className="block text-xs font-semibold text-gray-300 uppercase mb-1">
-                  Channel *
-                </label>
-                <select
-                  disabled={modalMode !== 'create'}
-                  value={formChannel}
-                  onChange={(e) => setFormChannel(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white text-sm disabled:opacity-60"
-                >
-                  <option value="email">Email</option>
-                  <option value="sms">SMS</option>
-                </select>
-                {modalMode === 'edit' && (
-                  <p className="text-xs text-gray-500 mt-1">Channel cannot be modified after creation.</p>
-                )}
-              </div>
+              <Select
+                id="template-channel"
+                label="Channel *"
+                disabled={modalMode !== 'create'}
+                value={formChannel}
+                onChange={(e) => setFormChannel(e.target.value)}
+                helper={
+                  modalMode === 'edit'
+                    ? 'Channel cannot be modified after creation.'
+                    : undefined
+                }
+              >
+                <option value="email">Email</option>
+                <option value="sms">SMS</option>
+              </Select>
 
               {formChannel === 'email' && (
-                <div>
-                  <label className="block text-xs font-semibold text-gray-300 uppercase mb-1">
-                    Subject Template
-                  </label>
-                  <input
-                    type="text"
-                    maxLength={255}
-                    disabled={modalMode === 'view'}
-                    value={formSubject}
-                    onChange={(e) => setFormSubject(e.target.value)}
-                    placeholder="Hello {{name}}, welcome!"
-                    className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white text-sm disabled:opacity-60"
-                  />
-                </div>
+                <Input
+                  id="template-subject"
+                  label="Subject Template"
+                  type="text"
+                  maxLength={255}
+                  disabled={modalMode === 'view'}
+                  value={formSubject}
+                  onChange={(e) => setFormSubject(e.target.value)}
+                  placeholder="Hello {{name}}, welcome to Notify!"
+                />
               )}
 
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="block text-xs font-semibold text-gray-300 uppercase">
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <label
+                    htmlFor="template-body"
+                    className="block text-xs font-medium text-[#1C1917]"
+                  >
                     Body Template *
                   </label>
-                  <span className={`text-xs ${formBody.length > 10000 ? 'text-red-400 font-bold' : 'text-gray-400'}`}>
+                  <span
+                    className={`text-[11px] ${
+                      formBody.length > 10000
+                        ? 'text-[#B91C1C] font-semibold'
+                        : 'text-[#78716C]'
+                    }`}
+                  >
                     {formBody.length} / 10000
                   </span>
                 </div>
                 <textarea
+                  id="template-body"
                   rows={6}
                   required
                   maxLength={10000}
                   disabled={modalMode === 'view'}
                   value={formBody}
                   onChange={(e) => setFormBody(e.target.value)}
-                  placeholder="Use {{variable}} syntax for dynamic inputs..."
-                  className="w-full font-mono px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white text-sm disabled:opacity-60"
+                  placeholder="Use {{variable}} syntax for dynamic personalization..."
+                  className="w-full font-mono text-xs px-3 py-2 rounded-[6px] bg-white border border-[#E7E5E4] text-[#1C1917] placeholder:text-[#A8A29E] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5] disabled:bg-[#F5F5F4]"
                 />
               </div>
 
-              {/* Detected Variables live list */}
-              <div>
-                <span className="block text-xs font-semibold text-gray-400 uppercase mb-1">
+              {/* Detected Variables Live List */}
+              <div className="space-y-1.5">
+                <span className="block text-xs font-medium text-[#78716C]">
                   Detected Variables ({detectedVars.length})
                 </span>
-                <div className="flex flex-wrap gap-1 p-2 rounded-lg bg-gray-950 border border-gray-800 min-h-[36px]">
+                <div className="flex flex-wrap gap-1.5 p-2.5 rounded-[6px] bg-[#FAFAF9] border border-[#E7E5E4] min-h-[36px]">
                   {detectedVars.length > 0 ? (
                     detectedVars.map((v) => (
-                      <span key={v} className="px-2 py-0.5 bg-blue-950 text-blue-300 border border-blue-800 rounded text-xs font-mono">
+                      <span
+                        key={v}
+                        className="px-2 py-0.5 bg-white text-[#4F46E5] border border-[#C7D2FE] rounded-[4px] text-xs font-mono"
+                      >
                         {`{{${v}}}`}
                       </span>
                     ))
                   ) : (
-                    <span className="text-xs text-gray-500">None detected yet. Type with {'{{variable}}'} format.</span>
+                    <span className="text-[11px] text-[#A8A29E]">
+                      No variables detected yet. Type with {'{{variable}}'}{' '}
+                      format.
+                    </span>
                   )}
                 </div>
               </div>
 
-              {/* Modal footer */}
-              <div className="flex justify-end gap-3 pt-4 border-t border-gray-800">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-medium"
-                >
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-[#E7E5E4]">
+                <Button variant="secondary" size="sm" onClick={closeModal}>
                   {modalMode === 'view' ? 'Close' : 'Cancel'}
-                </button>
+                </Button>
                 {modalMode !== 'view' && (
-                  <button
+                  <Button
                     type="submit"
-                    disabled={saving}
-                    className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium disabled:opacity-50"
+                    variant="primary"
+                    size="sm"
+                    loading={saving}
                   >
-                    {saving ? 'Saving...' : modalMode === 'create' ? 'Create Template' : 'Save Changes'}
-                  </button>
+                    {modalMode === 'create'
+                      ? 'Create Template'
+                      : 'Save Changes'}
+                  </Button>
                 )}
               </div>
             </form>
@@ -407,10 +476,10 @@ export default function TemplatesPage() {
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog
         open={Boolean(deleteTarget)}
-        title="Delete Template"
-        message={`Are you sure you want to permanently delete template "${deleteTarget?.name}"?`}
+        destructive
+        title="Delete Template?"
+        message={`Are you sure you want to delete "${deleteTarget?.name}"? Any automated jobs using this template will fail.`}
         confirmLabel="Delete"
-        cancelLabel="Cancel"
         loading={deleting}
         onConfirm={handleDeleteConfirm}
         onCancel={() => setDeleteTarget(null)}
@@ -418,4 +487,3 @@ export default function TemplatesPage() {
     </div>
   );
 }
-

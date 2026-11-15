@@ -1,20 +1,25 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { absoluteApiBase } from '../lib/api';
+import CodeBlock from '../components/ui/CodeBlock';
+import Card from '../components/ui/Card';
 
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
 function MethodBadge({ method }) {
   const colors = {
-    GET: 'bg-blue-700 text-blue-100',
-    POST: 'bg-green-700 text-green-100',
-    DELETE: 'bg-red-700 text-red-100',
-    PUT: 'bg-yellow-700 text-yellow-100',
-    PATCH: 'bg-orange-700 text-orange-100',
+    GET: 'bg-[#EFF6FF] text-[#1D4ED8] border-[#BFDBFE]',
+    POST: 'bg-[#ECFDF5] text-[#047857] border-[#A7F3D0]',
+    DELETE: 'bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]',
+    PUT: 'bg-[#FFFBEB] text-[#B45309] border-[#FDE68A]',
+    PATCH: 'bg-[#FFFBEB] text-[#B45309] border-[#FDE68A]',
   };
   return (
-    <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold uppercase mr-2 ${colors[method] || 'bg-gray-700 text-gray-100'}`}>
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono font-bold uppercase border ${
+        colors[method] || 'bg-[#F5F5F4] text-[#44403C] border-[#E7E5E4]'
+      }`}
+    >
       {method}
     </span>
   );
@@ -22,51 +27,35 @@ function MethodBadge({ method }) {
 
 function SchemaTable({ rows }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-800 mt-3">
+    <div className="overflow-x-auto rounded-[6px] border border-[#E7E5E4] mt-2.5">
       <table className="w-full text-xs">
         <thead>
-          <tr className="bg-gray-800 text-gray-400">
-            <th className="px-3 py-2 text-left font-medium">Field</th>
-            <th className="px-3 py-2 text-left font-medium">Type</th>
-            <th className="px-3 py-2 text-left font-medium">Required</th>
-            <th className="px-3 py-2 text-left font-medium">Description</th>
+          <tr className="bg-[#F5F5F4] text-[#78716C] border-b border-[#E7E5E4]">
+            <th className="px-3.5 py-2 text-left font-semibold text-[11px] uppercase tracking-wider">Field</th>
+            <th className="px-3.5 py-2 text-left font-semibold text-[11px] uppercase tracking-wider">Type</th>
+            <th className="px-3.5 py-2 text-left font-semibold text-[11px] uppercase tracking-wider">Required</th>
+            <th className="px-3.5 py-2 text-left font-semibold text-[11px] uppercase tracking-wider">Description</th>
           </tr>
         </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={r.field} className={i % 2 === 0 ? 'bg-gray-900' : 'bg-gray-950'}>
-              <td className="px-3 py-2 font-mono text-blue-300">{r.field}</td>
-              <td className="px-3 py-2 text-gray-400">{r.type}</td>
-              <td className="px-3 py-2 text-gray-400">{r.required ? 'Yes' : 'No'}</td>
-              <td className="px-3 py-2 text-gray-300">{r.description}</td>
+        <tbody className="divide-y divide-[#E7E5E4] bg-white">
+          {rows.map((r) => (
+            <tr key={r.field} className="hover:bg-[#FAFAF9] transition-colors">
+              <td className="px-3.5 py-2 font-mono text-[12px] text-[#4F46E5] font-medium">{r.field}</td>
+              <td className="px-3.5 py-2 font-mono text-[11px] text-[#78716C]">{r.type}</td>
+              <td className="px-3.5 py-2">
+                {r.required ? (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#FEF2F2] text-[#B91C1C]">
+                    Required
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-[#A8A29E]">Optional</span>
+                )}
+              </td>
+              <td className="px-3.5 py-2 text-[#44403C] text-[12px]">{r.description}</td>
             </tr>
           ))}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-function CodeBlock({ code, language = 'bash' }) {
-  const [copied, setCopied] = useState(false);
-  function handleCopy() {
-    navigator.clipboard.writeText(code).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }
-  return (
-    <div className="relative mt-3">
-      <pre className={`bg-gray-900 border border-gray-800 rounded-lg p-4 text-xs overflow-x-auto whitespace-pre-wrap break-all leading-relaxed ${language === 'bash' ? 'text-green-300' : 'text-gray-300'}`}>
-        {code}
-      </pre>
-      <button
-        type="button"
-        onClick={handleCopy}
-        className="absolute top-2 right-2 px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-200 text-xs transition-colors"
-      >
-        {copied ? 'Copied!' : 'Copy'}
-      </button>
     </div>
   );
 }
@@ -81,7 +70,8 @@ function buildSections(apiBase) {
       title: 'Authentication',
       method: 'POST',
       path: '/auth/login',
-      description: 'Obtain a bearer token by exchanging email and password credentials. Include the token as an Authorization header on all subsequent requests.',
+      description:
+        'Obtain a bearer token by exchanging email and password credentials. Include the token as an Authorization header on all subsequent requests.',
       schema: [
         { field: 'email', type: 'string', required: true, description: 'User email address' },
         { field: 'password', type: 'string', required: true, description: 'User password' },
@@ -101,11 +91,17 @@ function buildSections(apiBase) {
       title: 'Send Email',
       method: 'POST',
       path: '/notifications/email',
-      description: 'Send a transactional email. Supports plain-text body or a template reference with Jinja2 variables. Include an Idempotency-Key header to prevent duplicate sends.',
+      description:
+        'Send a transactional email. Supports plain-text body or a template reference with Jinja2 variables. Include an Idempotency-Key header to prevent duplicate sends.',
       schema: [
         { field: 'recipient', type: 'string', required: true, description: 'Recipient email address' },
         { field: 'subject', type: 'string', required: true, description: 'Email subject line' },
-        { field: 'body', type: 'string', required: false, description: 'Plain-text or HTML body (mutually exclusive with template_id)' },
+        {
+          field: 'body',
+          type: 'string',
+          required: false,
+          description: 'Plain-text or HTML body (mutually exclusive with template_id)',
+        },
         { field: 'template_id', type: 'string', required: false, description: 'Template ID to render (mutually exclusive with body)' },
         { field: 'template_vars', type: 'object', required: false, description: 'Variables passed to the Jinja2 template' },
         { field: 'scheduled_at', type: 'string (ISO 8601)', required: false, description: 'Schedule delivery for a future time' },
@@ -132,7 +128,8 @@ function buildSections(apiBase) {
       title: 'Send SMS',
       method: 'POST',
       path: '/notifications/sms',
-      description: 'Send an SMS message via a configured SMS provider (e.g. Twilio). The workspace must have an SMS provider credential configured.',
+      description:
+        'Send an SMS message via a configured SMS provider (e.g. Twilio). The workspace must have an SMS provider credential configured.',
       schema: [
         { field: 'recipient', type: 'string', required: true, description: 'Recipient phone number in E.164 format (e.g. +15551234567)' },
         { field: 'body', type: 'string', required: false, description: 'Message text (mutually exclusive with template_id)' },
@@ -159,7 +156,8 @@ function buildSections(apiBase) {
       title: 'Send Webhook',
       method: 'POST',
       path: '/notifications/webhook',
-      description: 'Dispatch an HTTP POST to a target URL with a JSON payload. Notify handles retries with exponential backoff on non-2xx responses.',
+      description:
+        'Dispatch an HTTP POST to a target URL with a JSON payload. Notify handles retries with exponential backoff on non-2xx responses.',
       schema: [
         { field: 'recipient', type: 'string (URL)', required: true, description: 'Target URL to POST the webhook payload to' },
         { field: 'body', type: 'string or object', required: true, description: 'Webhook payload (sent as JSON)' },
@@ -186,7 +184,8 @@ function buildSections(apiBase) {
       title: 'Bulk Send',
       method: 'POST',
       path: '/notifications/bulk',
-      description: 'Submit multiple notifications in a single request. Returns a batch ID you can poll for status. All items in a batch share the same channel.',
+      description:
+        'Submit multiple notifications in a single request. Returns a batch ID you can poll for status. All items in a batch share the same channel.',
       schema: [
         { field: 'channel', type: 'string', required: true, description: 'Channel for all items: email, sms, or webhook' },
         { field: 'notifications', type: 'array', required: true, description: 'Array of notification objects (same fields as single-send)' },
@@ -213,7 +212,8 @@ function buildSections(apiBase) {
       title: 'Templates',
       method: 'POST',
       path: '/templates',
-      description: 'Create a reusable message template with Jinja2 variable syntax. Reference the template by ID when sending a notification.',
+      description:
+        'Create a reusable message template with Jinja2 variable syntax. Reference the template by ID when sending a notification.',
       schema: [
         { field: 'name', type: 'string', required: true, description: 'Human-readable template name' },
         { field: 'channel', type: 'string', required: true, description: 'Channel this template is for: email, sms, or webhook' },
@@ -241,7 +241,8 @@ function buildSections(apiBase) {
       title: 'Suppressions',
       method: 'POST',
       path: '/suppressions',
-      description: 'Add a recipient to the suppression list so they will not receive notifications of the specified channel. Use GET /suppressions to list active suppressions.',
+      description:
+        'Add a recipient to the suppression list so they will not receive notifications of the specified channel. Use GET /suppressions to list active suppressions.',
       schema: [
         { field: 'recipient', type: 'string', required: true, description: 'Email address or phone number to suppress' },
         { field: 'channel', type: 'string', required: true, description: 'Channel to suppress: email or sms' },
@@ -273,33 +274,53 @@ export default function DocsPage() {
   const apiBase = absoluteApiBase();
   const SECTIONS = buildSections(apiBase);
   const SIDEBAR_LINKS = SECTIONS.map((s) => ({ id: s.id, title: s.title }));
+
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
+    <div className="min-h-screen bg-[#FAFAF9] text-[#1C1917] font-sans antialiased">
       {/* Top bar */}
-      <header className="border-b border-gray-800 bg-gray-950/80 backdrop-blur sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link to="/" className="font-bold text-blue-400 text-xl">Notify</Link>
-          <nav className="flex items-center gap-4">
-            <Link to="/login" className="text-sm text-gray-300 hover:text-white transition-colors">Log in</Link>
-            <Link to="/signup" className="text-sm px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors">
+      <header className="border-b border-[#E7E5E4] bg-white/90 backdrop-blur sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Link to="/" className="flex items-center gap-2 font-semibold text-[15px] text-[#1C1917] tracking-tight">
+              <span className="w-6 h-6 rounded-[5px] bg-[#4F46E5] text-white flex items-center justify-center font-bold text-[13px] shadow-sm">
+                N
+              </span>
+              <span>Notify</span>
+            </Link>
+            <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-[#F5F5F4] text-[#78716C] border border-[#E7E5E4]">
+              v1.0
+            </span>
+          </div>
+
+          <nav className="flex items-center gap-3">
+            <Link
+              to="/login"
+              className="text-xs font-medium text-[#78716C] hover:text-[#1C1917] px-3 py-1.5 rounded-[6px] hover:bg-[#F5F5F4] transition-colors"
+            >
+              Log in
+            </Link>
+            <Link
+              to="/signup"
+              className="text-xs font-medium px-3.5 py-1.5 rounded-[6px] bg-[#4F46E5] hover:bg-[#4338CA] text-white shadow-sm transition-colors"
+            >
               Sign up
             </Link>
           </nav>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 py-10 flex gap-8">
+      <div className="max-w-7xl mx-auto px-6 py-10 flex gap-10">
         {/* Sidebar */}
         <aside className="hidden md:block w-52 shrink-0">
           <div className="sticky top-24 space-y-1">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 px-3">
+            <p className="text-[11px] font-semibold text-[#78716C] uppercase tracking-wider mb-3 px-3">
               API Reference
             </p>
             {SIDEBAR_LINKS.map((link) => (
               <a
                 key={link.id}
                 href={`#${link.id}`}
-                className="block px-3 py-2 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+                className="block px-3 py-1.5 rounded-[6px] text-xs font-medium text-[#78716C] hover:text-[#1C1917] hover:bg-white hover:border-[#E7E5E4] border border-transparent transition-colors"
               >
                 {link.title}
               </a>
@@ -308,37 +329,52 @@ export default function DocsPage() {
         </aside>
 
         {/* Content */}
-        <main className="flex-1 min-w-0 space-y-16">
+        <main className="flex-1 min-w-0 space-y-12">
           <div>
-            <h1 className="text-3xl font-bold text-white mb-2">API Reference</h1>
-            <p className="text-gray-400 text-sm">
+            <h1 className="text-2xl font-bold tracking-tight text-[#1C1917] mb-2">API Reference</h1>
+            <p className="text-sm text-[#78716C] leading-relaxed">
               All endpoints require a{' '}
-              <code className="bg-gray-800 text-blue-300 px-1.5 py-0.5 rounded text-xs">Bearer</code>{' '}
+              <code className="bg-[#F5F5F4] text-[#4F46E5] border border-[#E7E5E4] px-1.5 py-0.5 rounded text-xs font-mono">
+                Bearer
+              </code>{' '}
               token in the{' '}
-              <code className="bg-gray-800 text-blue-300 px-1.5 py-0.5 rounded text-xs">Authorization</code>{' '}
+              <code className="bg-[#F5F5F4] text-[#4F46E5] border border-[#E7E5E4] px-1.5 py-0.5 rounded text-xs font-mono">
+                Authorization
+              </code>{' '}
               header, except the login endpoint. Base URL:{' '}
-              <code className="bg-gray-800 text-green-300 px-1.5 py-0.5 rounded text-xs">{apiBase}</code>.
+              <code className="bg-[#F5F5F4] text-[#047857] border border-[#E7E5E4] px-1.5 py-0.5 rounded text-xs font-mono">
+                {apiBase}
+              </code>
+              .
             </p>
           </div>
 
           {SECTIONS.map((section) => (
-            <section key={section.id} id={section.id} className="scroll-mt-24">
+            <Card key={section.id} id={section.id} className="scroll-mt-24 p-6">
               <div className="flex items-center gap-2 mb-2">
                 <MethodBadge method={section.method} />
-                <code className="text-blue-300 text-sm font-mono">{section.path}</code>
+                <code className="text-sm font-mono font-medium text-[#1C1917]">{section.path}</code>
               </div>
-              <h2 className="text-xl font-bold text-white mb-2">{section.title}</h2>
-              <p className="text-gray-400 text-sm leading-relaxed mb-4">{section.description}</p>
+              <h2 className="text-lg font-semibold text-[#1C1917] mb-1.5">{section.title}</h2>
+              <p className="text-xs text-[#78716C] leading-relaxed mb-4">{section.description}</p>
 
-              <h3 className="text-sm font-semibold text-gray-300 mb-1">Request body</h3>
+              <h3 className="text-xs font-semibold text-[#1C1917] uppercase tracking-wider mb-1">Request body</h3>
               <SchemaTable rows={section.schema} />
 
-              <h3 className="text-sm font-semibold text-gray-300 mt-5 mb-1">Example request</h3>
-              <CodeBlock code={section.curl} language="bash" />
+              <div className="mt-5">
+                <h3 className="text-xs font-semibold text-[#1C1917] uppercase tracking-wider mb-2">
+                  Example request
+                </h3>
+                <CodeBlock code={section.curl} language="bash" title="cURL" />
+              </div>
 
-              <h3 className="text-sm font-semibold text-gray-300 mt-5 mb-1">Example response</h3>
-              <CodeBlock code={section.response} language="json" />
-            </section>
+              <div className="mt-5">
+                <h3 className="text-xs font-semibold text-[#1C1917] uppercase tracking-wider mb-2">
+                  Example response
+                </h3>
+                <CodeBlock code={section.response} language="json" title="Response JSON" />
+              </div>
+            </Card>
           ))}
         </main>
       </div>

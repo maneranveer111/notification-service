@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { apiFetch, ApiError } from '../lib/api';
+import { apiFetch } from '../lib/api';
 import PasswordInput from '../components/PasswordInput';
+import Button from '../components/ui/Button';
+import { AlertCircle, CheckCircle2, Lock } from 'lucide-react';
 
 export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
@@ -43,15 +45,17 @@ export default function ResetPasswordPage() {
 
   if (done) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-        <div className="w-full max-w-md bg-white rounded-xl shadow-md p-8">
-          <h1 className="text-xl font-bold text-gray-900 mb-4">Password updated</h1>
-          <p className="text-gray-600 mb-6">You can now log in with your new password.</p>
-          <Link
-            to="/login"
-            className="inline-block py-2 px-4 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700"
-          >
-            Go to login
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#FAFAF9] px-4 py-12">
+        <div className="w-full max-w-[400px] bg-white rounded-[10px] border border-[#E7E5E4] shadow-sm p-8 text-center">
+          <div className="mx-auto flex items-center justify-center w-10 h-10 rounded-[8px] bg-[#ECFDF5] text-[#047857] mb-4">
+            <CheckCircle2 className="w-5 h-5" strokeWidth={1.5} />
+          </div>
+          <h1 className="text-xl font-bold tracking-tight text-[#1C1917] mb-2">Password updated</h1>
+          <p className="text-xs text-[#78716C] mb-6">
+            Your password has been changed successfully. You can now log in with your new credentials.
+          </p>
+          <Link to="/login">
+            <Button className="w-full">Go to login</Button>
           </Link>
         </div>
       </div>
@@ -60,15 +64,19 @@ export default function ResetPasswordPage() {
 
   if (failed) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-        <div className="w-full max-w-md bg-white rounded-xl shadow-md p-8">
-          <h1 className="text-xl font-bold text-gray-900 mb-4">Link expired</h1>
-          <p className="text-gray-600 mb-6">This link is invalid or expired.</p>
-          <Link
-            to="/forgot-password"
-            className="inline-block py-2 px-4 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700"
-          >
-            Request a new link
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#FAFAF9] px-4 py-12">
+        <div className="w-full max-w-[400px] bg-white rounded-[10px] border border-[#E7E5E4] shadow-sm p-8 text-center">
+          <div className="mx-auto flex items-center justify-center w-10 h-10 rounded-[8px] bg-[#FEF2F2] text-[#B91C1C] mb-4">
+            <AlertCircle className="w-5 h-5" strokeWidth={1.5} />
+          </div>
+          <h1 className="text-xl font-bold tracking-tight text-[#1C1917] mb-2">Link expired</h1>
+          <p className="text-xs text-[#78716C] mb-6">
+            This password reset link is invalid or has expired.
+          </p>
+          <Link to="/forgot-password">
+            <Button variant="secondary" className="w-full">
+              Request a new link
+            </Button>
           </Link>
         </div>
       </div>
@@ -76,14 +84,23 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md bg-white rounded-xl shadow-md p-8">
-        <h1 className="text-xl font-bold text-gray-900 mb-6">Set a new password</h1>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[#FAFAF9] px-4 py-12">
+      <div className="w-full max-w-[400px] bg-white rounded-[10px] border border-[#E7E5E4] shadow-sm p-8">
+        <div className="flex items-center justify-center w-10 h-10 rounded-[8px] bg-[#EEF2FF] text-[#4F46E5] mb-5">
+          <Lock className="w-5 h-5" strokeWidth={1.5} />
+        </div>
+        <h1 className="text-xl font-bold tracking-tight text-[#1C1917] mb-1">Set a new password</h1>
+        <p className="text-xs text-[#78716C] mb-6">
+          Choose a secure password with at least 8 characters.
+        </p>
+
         {error && (
-          <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-            {error}
+          <div className="mb-5 p-3 rounded-[6px] bg-[#FEF2F2] border border-[#FECACA] flex items-start gap-2.5 text-[#B91C1C] text-xs">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" strokeWidth={1.5} />
+            <span>{error}</span>
           </div>
         )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <PasswordInput
             id="password"
@@ -91,7 +108,7 @@ export default function ResetPasswordPage() {
             minLength={8}
             required
             value={password}
-            onChange={e => setPassword(e.target.value)}
+            onChange={(e) => setPassword(e.target.value)}
           />
           <PasswordInput
             id="confirm"
@@ -99,16 +116,19 @@ export default function ResetPasswordPage() {
             minLength={8}
             required
             value={confirm}
-            onChange={e => setConfirm(e.target.value)}
+            onChange={(e) => setConfirm(e.target.value)}
           />
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full py-2 px-4 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
-          >
-            {submitting ? 'Updating...' : 'Update password'}
-          </button>
+
+          <Button type="submit" loading={submitting} className="w-full mt-2">
+            Update password
+          </Button>
         </form>
+
+        <div className="mt-6 pt-5 border-t border-[#E7E5E4] text-center">
+          <Link to="/login" className="text-xs font-medium text-[#4F46E5] hover:text-[#4338CA] transition-colors">
+            Back to login
+          </Link>
+        </div>
       </div>
     </div>
   );

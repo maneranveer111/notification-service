@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -96,6 +97,15 @@ def _build_token_response(user: User, db: Session, target_ws_id: UUID | None = N
         if ws:
             workspace_info = WorkspaceInfo(id=ws.id, name=ws.name, slug=ws.slug, role=membership.role)
 
+    all_memberships = db.execute(
+        select(Membership).where(Membership.user_id == user.id)
+    ).scalars().all()
+    workspaces_list: list[WorkspaceInfo] = []
+    for m in all_memberships:
+        wsi = db.get(Workspace, m.workspace_id)
+        if wsi:
+            workspaces_list.append(WorkspaceInfo(id=wsi.id, name=wsi.name, slug=wsi.slug, role=m.role))
+
     token = create_access_token(
         user_id=user.id,
         email=user.email,
@@ -115,6 +125,7 @@ def _build_token_response(user: User, db: Session, target_ws_id: UUID | None = N
         ),
         workspace=workspace_info,
         is_superadmin=user.is_superadmin,
+        workspaces=workspaces_list,
     )
 
 
@@ -166,16 +177,45 @@ def signup(request: Request, payload: SignupRequest, db: Session = Depends(get_d
         )
 
     # Not first user
-    existing_user = db.scalar(select(User).where(User.email == target_email))
+    existing_user = db.scalar(
+        select(User).where(func.lower(func.trim(User.email)) == target_email)
+    )
 
-    if settings.require_email_verification:
-        if existing_user:
-            hash_password(payload.password)  # Timing oracle mitigation
-            return JSONResponse(
-                status_code=status.HTTP_202_ACCEPTED,
-                content={"message": "If this email is not registered, a verification link has been sent.", "email": target_email},
+    if existing_user:
+        hash_password(payload.password)  # Timing oracle mitigation
+        if existing_user.email_verified_at is not None:
+            # Case 1: Existing verified account
+            # Do not create another user, do not send verification email, direct to sign in
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="An account with this email already exists.",
             )
+        else:
+            # Case 2: Existing unverified account
+            # Reuse existing account, do not generate unlimited tokens
+            if settings.require_email_verification:
+                if check_rate_limit(f"resend:{target_email}", 1):
+                    token = make_verify_email_token(existing_user.id)
+                    link = f"{settings.frontend_public_url}/verify-email?token={token}"
+                    subject, body = verification_email(link)
+                    queue_system_email(existing_user.email, subject, body)
 
+                return JSONResponse(
+                    status_code=status.HTTP_202_ACCEPTED,
+                    content={
+                        "message": "If this email is unverified, a verification link has been sent.",
+                        "email": target_email,
+                        "status": "pending_verification",
+                    },
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="An account with this email already exists.",
+                )
+
+    # Case 3: New email address
+    try:
         ws_name = (payload.workspace_name or f"{target_email.split('@')[0]}'s Workspace").strip()
         ws = Workspace(
             name=ws_name,
@@ -191,7 +231,7 @@ def signup(request: Request, payload: SignupRequest, db: Session = Depends(get_d
             role="admin",
             is_superadmin=False,
             is_active=True,
-            email_verified_at=None,
+            email_verified_at=None if settings.require_email_verification else datetime.now(timezone.utc),
             last_workspace_id=ws.id,
         )
         db.add(user)
@@ -201,10 +241,38 @@ def signup(request: Request, payload: SignupRequest, db: Session = Depends(get_d
         db.add(mem)
         db.commit()
         db.refresh(user)
+    except IntegrityError:
+        db.rollback()
+        # Concurrency catch: user was created concurrently
+        existing_user = db.scalar(
+            select(User).where(func.lower(func.trim(User.email)) == target_email)
+        )
+        if existing_user:
+            hash_password(payload.password)
+            if existing_user.email_verified_at is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="An account with this email already exists.",
+                )
+            elif settings.require_email_verification:
+                return JSONResponse(
+                    status_code=status.HTTP_202_ACCEPTED,
+                    content={
+                        "message": "If this email is unverified, a verification link has been sent.",
+                        "email": target_email,
+                        "status": "pending_verification",
+                    },
+                )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email already exists.",
+        )
 
+    if settings.require_email_verification:
         token = make_verify_email_token(user.id)
         link = f"{settings.frontend_public_url}/verify-email?token={token}"
         subject, body = verification_email(link)
+        check_rate_limit(f"resend:{target_email}", 1)
         queue_system_email(target_email, subject, body)
 
         return JSONResponse(
@@ -212,39 +280,6 @@ def signup(request: Request, payload: SignupRequest, db: Session = Depends(get_d
             content={"message": "Verification email sent", "email": target_email},
         )
     else:
-        if existing_user:
-            hash_password(payload.password)  # Timing oracle mitigation
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Email already registered",
-            )
-
-        ws_name = (payload.workspace_name or f"{target_email.split('@')[0]}'s Workspace").strip()
-        ws = Workspace(
-            name=ws_name,
-            slug=generate_workspace_slug(ws_name),
-            webhook_token=secrets.token_urlsafe(32),
-        )
-        db.add(ws)
-        db.flush()
-
-        user = User(
-            email=target_email,
-            password_hash=hash_password(payload.password),
-            role="admin",
-            is_superadmin=False,
-            is_active=True,
-            email_verified_at=datetime.now(timezone.utc),
-            last_workspace_id=ws.id,
-        )
-        db.add(user)
-        db.flush()
-
-        mem = Membership(user_id=user.id, workspace_id=ws.id, role="owner")
-        db.add(mem)
-        db.commit()
-        db.refresh(user)
-
         res = _build_token_response(user, db, ws.id)
         return JSONResponse(status_code=status.HTTP_201_CREATED, content=res.model_dump(mode="json"))
 
@@ -277,7 +312,7 @@ def resend_verification(request: Request, payload: ResendVerificationRequest, db
 
     # Per-email rate limit: 1 per 60 seconds
     if check_rate_limit(f"resend:{target_email}", 1):
-        user = db.scalar(select(User).where(User.email == target_email))
+        user = db.scalar(select(User).where(func.lower(func.trim(User.email)) == target_email))
         if user and user.is_active and not user.email_verified_at:
             token = make_verify_email_token(user.id)
             link = f"{settings.frontend_public_url}/verify-email?token={token}"
@@ -295,7 +330,7 @@ def forgot_password(request: Request, payload: ForgotPasswordRequest, db: Sessio
 
     # Per-email rate limit: 1 per 60 seconds
     if check_rate_limit(f"forgot:{target_email}", 1):
-        user = db.scalar(select(User).where(User.email == target_email))
+        user = db.scalar(select(User).where(func.lower(func.trim(User.email)) == target_email))
         if user and user.is_active:
             token = make_reset_token(user.id, user.password_hash)
             link = f"{settings.frontend_public_url}/reset-password?token={token}"
@@ -344,16 +379,21 @@ def get_invitation_info(request: Request, token: str, db: Session = Depends(get_
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid token")
 
     invitation = db.get(Invitation, inv_id)
-    if not invitation or invitation.status != "pending":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invitation is invalid or has already been used",
-        )
+    if not invitation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found")
 
-    if invitation.expires_at < datetime.now(timezone.utc):
+    if invitation.status == "expired" or (invitation.status == "pending" and invitation.expires_at <= datetime.now(timezone.utc)):
+        invitation.status = "expired"
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invitation has expired",
+        )
+
+    if invitation.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invitation is invalid or has already been used",
         )
 
     ws = db.get(Workspace, invitation.workspace_id)
@@ -376,16 +416,21 @@ def accept_invitation(request: Request, payload: AcceptInvitationRequest, db: Se
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid token")
 
     invitation = db.get(Invitation, inv_id)
-    if not invitation or invitation.status != "pending":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invitation is invalid or has already been used",
-        )
+    if not invitation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found")
 
-    if invitation.expires_at < datetime.now(timezone.utc):
+    if invitation.status == "expired" or (invitation.status == "pending" and invitation.expires_at <= datetime.now(timezone.utc)):
+        invitation.status = "expired"
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invitation has expired",
+        )
+
+    if invitation.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invitation is invalid or has already been used",
         )
 
     auth_header = request.headers.get("Authorization")

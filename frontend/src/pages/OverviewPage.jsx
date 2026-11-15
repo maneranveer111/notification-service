@@ -1,72 +1,96 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
 } from 'recharts';
+import {
+  RotateCw,
+  Send,
+  CheckCircle2,
+  Circle,
+  ChevronRight,
+  X,
+  Radio,
+  Layers,
+  Sparkles,
+} from 'lucide-react';
 import { usePolling } from '../lib/usePolling';
-import { getStatsOverview, getStatsTimeseries, apiFetch, apiFetchWithCount, absoluteApiBase } from '../lib/api';
+import {
+  getStatsOverview,
+  getStatsTimeseries,
+  apiFetch,
+  apiFetchWithCount,
+  absoluteApiBase,
+} from '../lib/api';
 import { POLL_INTERVAL_MS } from '../lib/constants';
 import { useAuth } from '../lib/auth';
 import ErrorBanner from '../components/ErrorBanner';
 import Loading from '../components/Loading';
+import Button from '../components/ui/Button';
+import Card from '../components/ui/Card';
+import CodeBlock from '../components/ui/CodeBlock';
 
-function DailyUsageCard({ usageData }) {
-  if (!usageData) return null;
-  const daily = usageData.daily;
-  if (!daily) return null;
+function DailyUsageStrip({ usageData }) {
+  if (!usageData?.daily) return null;
+  const { used = 0, limit = null, resets_at } = usageData.daily;
+  const isUnlimited = limit === null;
+  const pct = isUnlimited ? 0 : Math.min(100, Math.round((used / limit) * 100));
 
-  const used = daily.used ?? 0;
-  const limit = daily.limit ?? null;
-  const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
-  const barColor =
-    limit === null ? 'bg-green-500' :
-    pct >= 100 ? 'bg-red-500' :
-    pct >= 80 ? 'bg-amber-500' : 'bg-green-500';
+  const resetStr = resets_at
+    ? `Quota resets ${new Date(resets_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+    : '';
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-sm font-medium text-gray-300">Daily Sends</p>
-        <Link to="/settings/general" className="text-xs text-blue-400 hover:text-blue-300">
-          View all usage →
-        </Link>
-      </div>
-      <div className="flex items-center justify-between text-xs text-gray-400 mb-1.5">
-        <span>{used} used</span>
-        <span>{limit === null ? <span className="text-green-400 font-medium">Unlimited</span> : `of ${limit}`}</span>
-      </div>
-      <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
-        {limit !== null && (
-          <div className={`h-2 rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
+    <div className="bg-white border border-[#E7E5E4] rounded-[8px] px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+      <div className="flex items-center gap-3">
+        <div className="w-5 h-5 rounded-[4px] bg-[#EEF2FF] flex items-center justify-center text-[#4F46E5]">
+          <Layers className="w-3.5 h-3.5" strokeWidth={1.5} />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[#1C1917] font-medium">Daily sends:</span>
+          <span className="text-[#1C1917] font-semibold">
+            {used.toLocaleString()}{' '}
+            <span className="text-[#78716C] font-normal">
+              {isUnlimited ? '(Unlimited)' : `of ${limit.toLocaleString()}`}
+            </span>
+          </span>
+          {!isUnlimited && (
+            <div className="w-20 h-1.5 bg-[#F5F5F4] rounded-full overflow-hidden ml-1">
+              <div
+                className={`h-full rounded-full ${
+                  pct >= 100 ? 'bg-[#B91C1C]' : pct >= 80 ? 'bg-[#A16207]' : 'bg-[#4F46E5]'
+                }`}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          )}
+        </div>
+        {resetStr && (
+          <span className="text-[#A8A29E] hidden md:inline">• {resetStr}</span>
         )}
       </div>
-      {daily.resets_at && (
-        <p className="text-xs text-gray-500 mt-1">
-          Resets {new Date(daily.resets_at).toLocaleString()}
-        </p>
-      )}
+      <Link
+        to="/settings/general"
+        className="text-[#4F46E5] hover:text-[#4338CA] font-medium flex items-center gap-1 shrink-0"
+      >
+        View usage & tier limits
+        <ChevronRight className="w-3.5 h-3.5" strokeWidth={1.5} />
+      </Link>
     </div>
   );
 }
 
 const WINDOWS = [
-  { label: '6 h', hours: 6, bucketHours: 1 },
-  { label: '24 h', hours: 24, bucketHours: 1 },
-  { label: '7 d', hours: 168, bucketHours: 24 },
+  { label: '6h', hours: 6, bucketHours: 1 },
+  { label: '24h', hours: 24, bucketHours: 1 },
+  { label: '7d', hours: 168, bucketHours: 24 },
 ];
-
-function StatCard({ label, value, sub, color = 'blue' }) {
-  const colors = {
-    blue: 'text-blue-400', green: 'text-emerald-400', red: 'text-red-400', yellow: 'text-yellow-400',
-  };
-  return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-      <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">{label}</p>
-      <p className={`text-3xl font-bold ${colors[color] || colors.blue}`}>{value ?? '—'}</p>
-      {sub && <p className="text-xs text-gray-500 mt-1">{sub}</p>}
-    </div>
-  );
-}
 
 function fmt(d) {
   if (!d) return '';
@@ -83,10 +107,15 @@ export default function OverviewPage() {
   // ── Onboarding checklist ─────────────────────────────────────────────────
   const { workspace, isAdmin } = useAuth();
   const dismissedKey = `onboarding_dismissed:${workspace?.id}`;
-  const [dismissed, setDismissed] = useState(() => localStorage.getItem(dismissedKey) === '1');
-  const [checks, setChecks] = useState({ provider: false, notification: false, apiKey: false });
-  const [expanded, setExpanded] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [dismissed, setDismissed] = useState(
+    () => localStorage.getItem(dismissedKey) === '1'
+  );
+  const [checks, setChecks] = useState({
+    provider: false,
+    notification: false,
+    apiKey: false,
+  });
+  const [expandedSnippet, setExpandedSnippet] = useState(false);
 
   useEffect(() => {
     if (!isAdmin || dismissed) return;
@@ -104,206 +133,304 @@ export default function OverviewPage() {
   }, [workspace?.id, isAdmin, dismissed]);
 
   const allDone = checks.provider && checks.notification && checks.apiKey;
-  const completedCount = Object.values(checks).filter(Boolean).length;
+  const completedCount =
+    (checks.provider ? 1 : 0) +
+    (checks.notification ? 1 : 0) +
+    (checks.apiKey ? 1 : 0);
 
   const apiBase = absoluteApiBase();
   const curlExample = `curl -X POST ${apiBase}/notifications/email \\
-  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "X-API-Key: YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '{"recipient":"user@example.com","subject":"Hello","body":"World"}'`;
+  -d '{
+    "recipient": "user@example.com",
+    "subject": "Hello from Notify",
+    "body": "Welcome to your notification infrastructure."
+  }'`;
 
-  function handleCopy() {
-    navigator.clipboard.writeText(curlExample).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }
-
-  const STEPS = [
-    {
-      label: 'Connect an email provider',
-      done: checks.provider,
-      link: '/settings/providers',
-      linkLabel: 'Go to Providers',
-    },
-    {
-      label: 'Send a test email',
-      done: checks.notification,
-      link: '/send',
-      linkLabel: 'Send a notification',
-    },
-    {
-      label: 'Create an API key',
-      done: checks.apiKey,
-      link: '/settings/api-keys',
-      linkLabel: 'Go to API Keys',
-    },
-  ];
-  // ── End onboarding checklist ─────────────────────────────────────────────
-
-  const fetchOverview = useCallback(() => getStatsOverview(win.hours), [win.hours]);
+  const fetchOverview = useCallback(
+    () => getStatsOverview(win.hours),
+    [win.hours]
+  );
   const fetchTimeseries = useCallback(
     () => getStatsTimeseries(win.hours, win.bucketHours),
-    [win.hours, win.bucketHours],
+    [win.hours, win.bucketHours]
   );
 
-  // Compact daily usage card data (fetch once on mount)
   const [usageData, setUsageData] = useState(null);
   useEffect(() => {
-    apiFetch('/usage').then((d) => setUsageData(d)).catch(() => {});
+    apiFetch('/usage')
+      .then((d) => setUsageData(d))
+      .catch(() => {});
   }, []);
 
-  const { data: stats, error: statsErr, loading: statsLoading, refresh: refreshStats, lastUpdated } =
-    usePolling(fetchOverview, { intervalMs: POLL_INTERVAL_MS });
-  const { data: series, error: seriesErr, refresh: refreshSeries } =
-    usePolling(fetchTimeseries, { intervalMs: POLL_INTERVAL_MS });
+  const {
+    data: stats,
+    error: statsErr,
+    loading: statsLoading,
+    refresh: refreshStats,
+  } = usePolling(fetchOverview, { intervalMs: POLL_INTERVAL_MS });
 
-  function refresh() { refreshStats(); refreshSeries(); }
+  const {
+    data: series,
+    error: seriesErr,
+    refresh: refreshSeries,
+  } = usePolling(fetchTimeseries, { intervalMs: POLL_INTERVAL_MS });
+
+  function refresh() {
+    refreshStats();
+    refreshSeries();
+  }
 
   const total = stats?.total ?? 0;
   const byStatus = stats?.totals_by_status || {};
   const successRate = stats?.success_rate ?? 0;
-  const avgAttempts = stats?.avg_attempts ?? 0;
-  const failed = (byStatus.failed || 0) + (byStatus.bounced || 0) + (byStatus.undelivered || 0);
-  const inProgress = (byStatus.pending || 0) + (byStatus.processing || 0) +
-    (byStatus.retrying || 0) + (byStatus.scheduled || 0);
-  const sentDelivered = (byStatus.sent || 0) + (byStatus.delivered || 0);
+  const failed =
+    (byStatus.failed || 0) + (byStatus.bounced || 0) + (byStatus.undelivered || 0);
+  const inProgress =
+    (byStatus.pending || 0) +
+    (byStatus.processing || 0) +
+    (byStatus.retrying || 0) +
+    (byStatus.scheduled || 0);
+  const delivered =
+    (byStatus.delivered || 0) + (byStatus.sent || 0);
 
   const chartData = (series || []).map((b) => ({
     time: fmt(b.bucket),
-    ok: b.ok,
-    failed: b.failed,
-    other: b.other,
+    delivered: b.ok || 0,
+    failed: b.failed || 0,
   }));
 
-  const queues = stats?.queues || {};
-  const hasQueues = Object.keys(queues).length > 0;
+  const byChannel = stats?.by_channel || {};
+  const byProvider = stats?.by_provider || {};
   const topErrors = stats?.top_errors || [];
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-bold">Overview</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-1">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-semibold text-[#1C1917] tracking-tight">
+            Overview
+          </h1>
+          <p className="text-xs sm:text-sm text-[#78716C] mt-0.5">
+            Real-time delivery status and notification dispatch volume across all channels.
+          </p>
+        </div>
+
         <div className="flex items-center gap-2">
-          <div className="flex rounded-lg overflow-hidden border border-gray-700">
+          {/* Time range selector */}
+          <div className="inline-flex rounded-[6px] border border-[#E7E5E4] bg-white p-0.5 shadow-xs">
             {WINDOWS.map((w, i) => (
               <button
                 key={w.hours}
                 onClick={() => setWinIdx(i)}
-                className={`px-3 py-1.5 text-sm font-medium transition-colors ${
-                  i === winIdx ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                className={`px-2.5 py-1 text-xs font-medium rounded-[4px] transition-colors cursor-pointer ${
+                  i === winIdx
+                    ? 'bg-[#F5F5F4] text-[#1C1917]'
+                    : 'text-[#78716C] hover:text-[#1C1917]'
                 }`}
               >
                 {w.label}
               </button>
             ))}
           </div>
-          <button
+
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={refresh}
-            className="px-3 py-1.5 text-sm rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300"
+            icon={RotateCw}
           >
             Refresh
-          </button>
+          </Button>
+
+          {isAdmin && (
+            <Link to="/send">
+              <Button
+                variant="primary"
+                size="sm"
+                icon={Send}
+              >
+                Send Test Notification
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
 
       {flash && (
-        <div className="px-4 py-3 rounded-lg bg-amber-900/30 border border-amber-700 text-amber-300 text-sm flex items-center justify-between">
-          <span>⚠ {flash}</span>
+        <div className="px-3.5 py-2.5 rounded-[6px] bg-[#FEFCE8] border border-[#FEF08A] text-[#A16207] text-xs">
+          {flash}
         </div>
       )}
 
-      {/* Daily usage compact card */}
-      <DailyUsageCard usageData={usageData} />
+      {/* Daily Usage Strip */}
+      <DailyUsageStrip usageData={usageData} />
 
-      {/* Onboarding checklist */}
+      {/* Setup Checklist (Card in app's own light theme) */}
       {isAdmin && !dismissed && !allDone && (
-        <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6 text-gray-900">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-base font-semibold">Get started with Notify</h2>
+        <div className="bg-white border border-[#E7E5E4] rounded-[8px] p-5 shadow-xs relative">
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#4F46E5]" strokeWidth={1.5} />
+                <h2 className="text-sm font-semibold text-[#1C1917]">
+                  Setup checklist
+                </h2>
+                <span className="text-xs text-[#78716C] font-normal">
+                  {completedCount} of 3 completed
+                </span>
+              </div>
+              <p className="text-xs text-[#78716C] mt-0.5">
+                Complete these foundational steps to unlock production traffic across high-throughput relays.
+              </p>
+            </div>
             <button
               type="button"
-              onClick={() => { localStorage.setItem(dismissedKey, '1'); setDismissed(true); }}
-              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              onClick={() => {
+                localStorage.setItem(dismissedKey, '1');
+                setDismissed(true);
+              }}
+              className="text-[#A8A29E] hover:text-[#1C1917] p-1 rounded transition-colors"
+              title="Dismiss checklist"
             >
-              Dismiss
+              <X className="w-4 h-4" strokeWidth={1.5} />
             </button>
           </div>
-          {/* Progress bar */}
-          <div className="h-2 rounded-full bg-gray-200 mb-5 overflow-hidden">
-            <div
-              className="h-2 rounded-full bg-indigo-500 transition-all"
-              style={{ width: `${(completedCount / 3) * 100}%` }}
-            />
-          </div>
-          <ul className="space-y-3">
-            {STEPS.map((step) => (
-              <li key={step.label} className="flex items-center gap-3">
-                <span
-                  className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
-                    step.done
-                      ? 'bg-indigo-500 text-white'
-                      : 'bg-gray-200 text-gray-400'
-                  }`}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* Step 1: Provider */}
+            <div className="border border-[#E7E5E4] rounded-[6px] p-3.5 flex flex-col justify-between bg-[#FAFAF9]/50">
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  {checks.provider ? (
+                    <CheckCircle2
+                      className="w-4 h-4 text-[#15803D]"
+                      strokeWidth={1.5}
+                    />
+                  ) : (
+                    <Circle
+                      className="w-4 h-4 text-[#A8A29E]"
+                      strokeWidth={1.5}
+                    />
+                  )}
+                  <h4 className="text-xs font-semibold text-[#1C1917]">
+                    Connect an email provider
+                  </h4>
+                </div>
+                <p className="text-[11px] text-[#78716C]">
+                  Configure Brevo or SMTP credentials in Settings.
+                </p>
+              </div>
+              <div className="mt-3 pt-2 border-t border-[#E7E5E4]">
+                <Link
+                  to="/settings/providers"
+                  className="text-xs font-medium text-[#4F46E5] hover:text-[#4338CA] flex items-center gap-1"
                 >
-                  {step.done ? '✓' : ''}
-                </span>
-                <span className={`flex-1 text-sm ${step.done ? 'line-through text-gray-400' : 'text-gray-800'}`}>
-                  {step.label}
-                </span>
-                {!step.done && (
-                  <Link
-                    to={step.link}
-                    className="text-xs text-indigo-600 hover:text-indigo-800 font-medium shrink-0"
-                  >
-                    {step.linkLabel} →
-                  </Link>
-                )}
-              </li>
-            ))}
-            {/* Step 4: Make your first API call */}
-            <li className="flex items-start gap-3">
-              <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-200 text-gray-400 mt-0.5">
-              </span>
-              <div className="flex-1">
+                  Manage providers <ChevronRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            </div>
+
+            {/* Step 2: Test send */}
+            <div className="border border-[#E7E5E4] rounded-[6px] p-3.5 flex flex-col justify-between bg-[#FAFAF9]/50">
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  {checks.notification ? (
+                    <CheckCircle2
+                      className="w-4 h-4 text-[#15803D]"
+                      strokeWidth={1.5}
+                    />
+                  ) : (
+                    <Circle
+                      className="w-4 h-4 text-[#A8A29E]"
+                      strokeWidth={1.5}
+                    />
+                  )}
+                  <h4 className="text-xs font-semibold text-[#1C1917]">
+                    Send a test email
+                  </h4>
+                </div>
+                <p className="text-[11px] text-[#78716C]">
+                  Verify template engine & delivery dispatch.
+                </p>
+              </div>
+              <div className="mt-3 pt-2 border-t border-[#E7E5E4]">
+                <Link
+                  to="/send"
+                  className="text-xs font-medium text-[#4F46E5] hover:text-[#4338CA] flex items-center gap-1"
+                >
+                  Send test <ChevronRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            </div>
+
+            {/* Step 3: API Key */}
+            <div className="border border-[#E7E5E4] rounded-[6px] p-3.5 flex flex-col justify-between bg-[#FAFAF9]/50">
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  {checks.apiKey ? (
+                    <CheckCircle2
+                      className="w-4 h-4 text-[#15803D]"
+                      strokeWidth={1.5}
+                    />
+                  ) : (
+                    <Circle
+                      className="w-4 h-4 text-[#A8A29E]"
+                      strokeWidth={1.5}
+                    />
+                  )}
+                  <h4 className="text-xs font-semibold text-[#1C1917]">
+                    Create an API key
+                  </h4>
+                </div>
+                <p className="text-[11px] text-[#78716C]">
+                  Authenticate your backend microservices.
+                </p>
+              </div>
+              <div className="mt-3 pt-2 border-t border-[#E7E5E4]">
+                <Link
+                  to="/settings/api-keys"
+                  className="text-xs font-medium text-[#4F46E5] hover:text-[#4338CA] flex items-center gap-1"
+                >
+                  Generate key <ChevronRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            </div>
+
+            {/* Step 4: Snippets */}
+            <div className="border border-[#E7E5E4] rounded-[6px] p-3.5 flex flex-col justify-between bg-[#FAFAF9]/50">
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <Circle className="w-4 h-4 text-[#A8A29E]" strokeWidth={1.5} />
+                  <h4 className="text-xs font-semibold text-[#1C1917]">
+                    Make your first API call
+                  </h4>
+                </div>
+                <p className="text-[11px] text-[#78716C]">
+                  cURL, Node.js, or Python snippets.
+                </p>
+              </div>
+              <div className="mt-3 pt-2 border-t border-[#E7E5E4]">
                 <button
                   type="button"
-                  onClick={() => setExpanded((v) => !v)}
-                  className="text-sm text-gray-800 flex items-center gap-1 hover:text-indigo-700 transition-colors"
+                  onClick={() => setExpandedSnippet((o) => !o)}
+                  className="text-xs font-medium text-[#4F46E5] hover:text-[#4338CA] flex items-center gap-1 cursor-pointer"
                 >
-                  Make your first API call
-                  <svg
-                    className={`w-3.5 h-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`}
-                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
+                  {expandedSnippet ? 'Hide snippet' : 'View snippet'}{' '}
+                  <ChevronRight className="w-3.5 h-3.5" />
                 </button>
-                {expanded && (
-                  <div className="mt-2 relative">
-                    <pre className="bg-gray-900 text-green-300 text-xs rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all">
-                      {curlExample}
-                    </pre>
-                    <button
-                      type="button"
-                      onClick={handleCopy}
-                      className="absolute top-2 right-2 px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-200 text-xs transition-colors"
-                    >
-                      {copied ? 'Copied!' : 'Copy'}
-                    </button>
-                  </div>
-                )}
               </div>
-            </li>
-          </ul>
-        </div>
-      )}
+            </div>
+          </div>
 
-      {lastUpdated && (
-        <p className="text-xs text-gray-500">
-          Last updated: {lastUpdated.toLocaleTimeString()}
-        </p>
+          {expandedSnippet && (
+            <div className="mt-4">
+              <CodeBlock code={curlExample} language="bash" title="cURL Example" />
+            </div>
+          )}
+        </div>
       )}
 
       {(statsErr || seriesErr) && (
@@ -314,105 +441,328 @@ export default function OverviewPage() {
         <Loading />
       ) : (
         <>
-          {/* Stat Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-            <StatCard label="Total" value={total} />
-            <StatCard label="Sent / Delivered" value={sentDelivered} color="green" />
-            <StatCard label="Failed" value={failed} color="red" />
-            <StatCard label="In Progress" value={inProgress} color="yellow" />
-            <StatCard label="Success Rate" value={`${successRate.toFixed(1)}%`} color="green"
-              sub={`Avg ${avgAttempts.toFixed(2)} attempts`} />
+          {/* Single 5-stat container divided by hairlines */}
+          <div className="bg-white border border-[#E7E5E4] rounded-[8px] divide-y sm:divide-y-0 sm:divide-x divide-[#E7E5E4] grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 shadow-xs overflow-hidden">
+            {/* Stat 1: Total */}
+            <div className="p-4 sm:p-5 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-[#78716C] uppercase tracking-wider">
+                  Total Sends
+                </span>
+                <Radio className="w-3.5 h-3.5 text-[#A8A29E]" strokeWidth={1.5} />
+              </div>
+              <div className="mt-2">
+                <div className="text-2xl sm:text-3xl font-semibold text-[#1C1917] tracking-tight">
+                  {total.toLocaleString()}
+                </div>
+                <div className="text-[11px] text-[#78716C] mt-1">
+                  In selected window
+                </div>
+              </div>
+            </div>
+
+            {/* Stat 2: Delivered */}
+            <div className="p-4 sm:p-5 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-[#78716C] uppercase tracking-wider">
+                  Delivered
+                </span>
+                <span className="w-2 h-2 rounded-full bg-[#15803D]" />
+              </div>
+              <div className="mt-2">
+                <div className="text-2xl sm:text-3xl font-semibold text-[#1C1917] tracking-tight">
+                  {delivered.toLocaleString()}
+                </div>
+                <div className="text-[11px] text-[#15803D] mt-1 font-medium">
+                  {total > 0 ? `${((delivered / total) * 100).toFixed(1)}%` : '0%'} delivered
+                </div>
+              </div>
+            </div>
+
+            {/* Stat 3: Failed */}
+            <div className="p-4 sm:p-5 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-[#78716C] uppercase tracking-wider">
+                  Failed
+                </span>
+                <span className="w-2 h-2 rounded-full bg-[#B91C1C]" />
+              </div>
+              <div className="mt-2">
+                <div className="text-2xl sm:text-3xl font-semibold text-[#1C1917] tracking-tight">
+                  {failed.toLocaleString()}
+                </div>
+                <div className="text-[11px] text-[#B91C1C] mt-1">
+                  {total > 0 ? `${((failed / total) * 100).toFixed(1)}% failed` : '0%'}
+                </div>
+              </div>
+            </div>
+
+            {/* Stat 4: In Progress */}
+            <div className="p-4 sm:p-5 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-[#78716C] uppercase tracking-wider">
+                  In Progress
+                </span>
+                <span className="w-2 h-2 rounded-full bg-[#A16207]" />
+              </div>
+              <div className="mt-2">
+                <div className="text-2xl sm:text-3xl font-semibold text-[#1C1917] tracking-tight">
+                  {inProgress.toLocaleString()}
+                </div>
+                <div className="text-[11px] text-[#78716C] mt-1">
+                  Queued & retrying
+                </div>
+              </div>
+            </div>
+
+            {/* Stat 5: Success Rate */}
+            <div className="p-4 sm:p-5 flex flex-col justify-between col-span-2 sm:col-span-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-[#78716C] uppercase tracking-wider">
+                  Success Rate
+                </span>
+                <CheckCircle2
+                  className="w-3.5 h-3.5 text-[#15803D]"
+                  strokeWidth={1.5}
+                />
+              </div>
+              <div className="mt-2">
+                <div className="text-2xl sm:text-3xl font-semibold text-[#1C1917] tracking-tight">
+                  {successRate.toFixed(1)}%
+                </div>
+                <div className="text-[11px] text-[#78716C] mt-1">
+                  Overall delivery rate
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Chart */}
-          {chartData.length > 0 && (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-              <h2 className="text-sm font-medium text-gray-300 mb-4">Delivery over time</h2>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                  <XAxis dataKey="time" tick={{ fill: '#9ca3af', fontSize: 11 }} />
-                  <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} allowDecimals={false} />
-                  <Tooltip
-                    contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: 8 }}
-                    labelStyle={{ color: '#d1d5db' }}
-                  />
-                  <Legend wrapperStyle={{ color: '#9ca3af', fontSize: 12 }} />
-                  <Bar dataKey="ok" name="OK" fill="#34d399" stackId="a" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="failed" name="Failed" fill="#f87171" stackId="a" />
-                  <Bar dataKey="other" name="Other" fill="#6b7280" stackId="a" radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+          {/* Delivery over time Line Chart */}
+          <div className="bg-white border border-[#E7E5E4] rounded-[8px] p-5 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+              <div>
+                <h3 className="text-sm font-semibold text-[#1C1917]">
+                  Delivery over time
+                </h3>
+                <p className="text-xs text-[#78716C] mt-0.5">
+                  Hourly volume and delivery outcome breakdown.
+                </p>
+              </div>
+              <div className="flex items-center gap-4 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#4F46E5]" />
+                  <span className="text-[#1C1917] font-medium">Delivered</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#EF4444]" />
+                  <span className="text-[#1C1917] font-medium">Failed</span>
+                </div>
+              </div>
             </div>
-          )}
 
-          {/* By Channel + By Provider */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-              <h2 className="text-sm font-medium text-gray-300 mb-3">By Channel</h2>
-              {Object.keys(stats?.by_channel || {}).length === 0 ? (
-                <p className="text-xs text-gray-500">No data</p>
-              ) : (
-                <ul className="space-y-1">
-                  {Object.entries(stats.by_channel).map(([ch, n]) => (
-                    <li key={ch} className="flex justify-between text-sm">
-                      <span className="text-gray-400 capitalize">{ch}</span>
-                      <span className="font-medium">{n}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-              <h2 className="text-sm font-medium text-gray-300 mb-3">By Provider</h2>
-              {Object.keys(stats?.by_provider || {}).length === 0 ? (
-                <p className="text-xs text-gray-500">No data</p>
-              ) : (
-                <ul className="space-y-1">
-                  {Object.entries(stats.by_provider).map(([p, n]) => (
-                    <li key={p} className="flex justify-between text-sm">
-                      <span className="text-gray-400 capitalize">{p}</span>
-                      <span className="font-medium">{n}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+            {chartData.length > 0 ? (
+              <div className="h-56 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={chartData}
+                    margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="#F5F5F4"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="time"
+                      tick={{ fill: '#78716C', fontSize: 11 }}
+                      stroke="#E7E5E4"
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={{ fill: '#78716C', fontSize: 11 }}
+                      stroke="#E7E5E4"
+                      tickLine={false}
+                      allowDecimals={false}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        background: '#FFFFFF',
+                        border: '1px solid #E7E5E4',
+                        borderRadius: 6,
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.04)',
+                        fontSize: 12,
+                      }}
+                      labelStyle={{ color: '#1C1917', fontWeight: 600 }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="delivered"
+                      name="Delivered"
+                      stroke="#4F46E5"
+                      strokeWidth={2}
+                      dot={false}
+                      activeDot={{ r: 4, stroke: '#4F46E5', strokeWidth: 1 }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="failed"
+                      name="Failed"
+                      stroke="#EF4444"
+                      strokeWidth={1.5}
+                      dot={false}
+                      activeDot={{ r: 4, stroke: '#EF4444', strokeWidth: 1 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="h-44 flex items-center justify-center text-xs text-[#78716C]">
+                No timeseries data in this window.
+              </div>
+            )}
           </div>
 
-          {/* Top Errors + Queues */}
+          {/* By Channel + By Provider Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-              <h2 className="text-sm font-medium text-gray-300 mb-3">Top Errors</h2>
-              {topErrors.length === 0 ? (
-                <p className="text-xs text-gray-500">No errors in this window 🎉</p>
+            {/* By Channel */}
+            <Card
+              title="By channel"
+              subtitle="Volume distribution and status"
+              action={
+                <Link
+                  to="/templates"
+                  className="text-xs text-[#4F46E5] hover:text-[#4338CA] font-medium"
+                >
+                  Configure templates →
+                </Link>
+              }
+            >
+              {Object.keys(byChannel).length === 0 ? (
+                <p className="text-xs text-[#78716C] py-4 text-center">
+                  No channel traffic recorded yet.
+                </p>
               ) : (
-                <ul className="space-y-2">
-                  {topErrors.map((e, i) => (
-                    <li key={i} className="flex justify-between text-xs gap-2">
-                      <span className="text-gray-400 truncate">{e.error || e[0]}</span>
-                      <span className="shrink-0 font-medium text-red-400">{e.count ?? e[1]}</span>
-                    </li>
-                  ))}
-                </ul>
+                <div className="space-y-3">
+                  {Object.entries(byChannel).map(([ch, count]) => {
+                    const pctCh = total > 0 ? Math.round((count / total) * 100) : 0;
+                    return (
+                      <div key={ch} className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-medium text-[#1C1917] capitalize">
+                            {ch}
+                          </span>
+                          <span className="text-[#78716C]">
+                            <strong className="text-[#1C1917]">
+                              {count.toLocaleString()}
+                            </strong>{' '}
+                            ({pctCh}%)
+                          </span>
+                        </div>
+                        <div className="h-1.5 w-full bg-[#F5F5F4] rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-[#4F46E5] rounded-full"
+                            style={{ width: `${pctCh}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
-            </div>
-            {hasQueues && (
-              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                <h2 className="text-sm font-medium text-gray-300 mb-3">Queue Depths</h2>
-                <div className="flex flex-wrap gap-2">
-                  {Object.entries(queues).map(([q, depth]) => (
-                    <span
-                      key={q}
-                      className={`px-3 py-1 rounded-full text-xs font-medium border ${
-                        depth > 50
-                          ? 'bg-red-900/30 text-red-300 border-red-700'
-                          : 'bg-gray-800 text-gray-300 border-gray-700'
-                      }`}
+            </Card>
+
+            {/* By Provider */}
+            <Card
+              title="By provider"
+              subtitle="Real-time gateway connectivity"
+              action={
+                <Link
+                  to="/settings/providers"
+                  className="text-xs text-[#4F46E5] hover:text-[#4338CA] font-medium"
+                >
+                  Manage providers →
+                </Link>
+              }
+            >
+              {Object.keys(byProvider).length === 0 ? (
+                <p className="text-xs text-[#78716C] py-4 text-center">
+                  No provider delivery data recorded yet.
+                </p>
+              ) : (
+                <div className="divide-y divide-[#E7E5E4]">
+                  {Object.entries(byProvider).map(([p, count]) => (
+                    <div
+                      key={p}
+                      className="py-2.5 first:pt-0 last:pb-0 flex items-center justify-between text-xs"
                     >
-                      {q}: {depth}
-                    </span>
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-[#15803D]" />
+                        <span className="font-medium text-[#1C1917] capitalize">
+                          {p}
+                        </span>
+                      </div>
+                      <span className="text-[#78716C]">
+                        <strong className="text-[#1C1917]">
+                          {count.toLocaleString()}
+                        </strong>{' '}
+                        dispatched
+                      </span>
+                    </div>
                   ))}
                 </div>
+              )}
+            </Card>
+          </div>
+
+          {/* Top Errors Table */}
+          <div className="bg-white border border-[#E7E5E4] rounded-[8px] overflow-hidden shadow-xs">
+            <div className="px-5 py-4 border-b border-[#E7E5E4] flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-[#1C1917]">
+                  Top errors & incidents
+                </h3>
+                <p className="text-xs text-[#78716C] mt-0.5">
+                  Recent dispatch failures and rate limits.
+                </p>
+              </div>
+              <span className="text-xs font-medium px-2 py-0.5 rounded-[4px] bg-[#F5F5F4] text-[#78716C] border border-[#E7E5E4]">
+                {topErrors.length} {topErrors.length === 1 ? 'type' : 'types'}
+              </span>
+            </div>
+
+            {topErrors.length === 0 ? (
+              <div className="p-8 text-center text-xs text-[#78716C]">
+                No errors recorded in this time window. Everything is operating normally.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#FAFAF9] border-b border-[#E7E5E4] text-[11px] font-semibold text-[#78716C] uppercase tracking-wider">
+                    <tr>
+                      <th className="px-5 py-3">Error & Reason</th>
+                      <th className="px-5 py-3 text-right">Count</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E7E5E4]">
+                    {topErrors.map((e, i) => {
+                      const errName = e.error || e[0] || 'Unknown Error';
+                      const count = e.count ?? e[1] ?? 1;
+                      return (
+                        <tr
+                          key={i}
+                          className="hover:bg-[#FAFAF9]/60 transition-colors"
+                        >
+                          <td className="px-5 py-3 font-mono text-[12px] text-[#B91C1C]">
+                            {errName}
+                          </td>
+                          <td className="px-5 py-3 text-right font-medium text-[#1C1917]">
+                            {count.toLocaleString()}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
@@ -421,4 +771,3 @@ export default function OverviewPage() {
     </div>
   );
 }
-

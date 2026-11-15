@@ -1,55 +1,89 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Link, useLocation } from 'react-router-dom';
 import React, { useState, useEffect, useRef } from 'react';
+import {
+  LayoutDashboard,
+  Bell,
+  LayoutTemplate,
+  Send,
+  Layers,
+  Mail,
+  BookOpen,
+  Settings,
+  ShieldAlert,
+  ChevronsUpDown,
+  Plus,
+  Check,
+  LogOut,
+  Menu,
+  X,
+} from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { apiFetch } from '../lib/api';
 import { describeError } from '../lib/errors';
+import Button from './ui/Button';
+import Input from './ui/Input';
 
-const NAV = [
-  { to: '/', label: 'Overview', exact: true },
-  { to: '/docs', label: 'Docs', exact: false },
-  { to: '/notifications', label: 'Notifications', exact: false },
-  { to: '/templates', label: 'Templates', exact: false },
-  { to: '/send', label: 'Send', exact: false, adminOnly: true },
-  { to: '/bulk', label: 'Bulk', exact: false, adminOnly: true },
-  { to: '/settings', label: 'Settings', exact: false },
-  { to: '/platform', label: 'Platform', exact: false, superadminOnly: true },
+const NAV_GROUPS = [
+  {
+    title: 'MONITOR',
+    items: [
+      { to: '/', label: 'Overview', exact: true, icon: LayoutDashboard },
+      { to: '/notifications', label: 'Notifications', exact: false, icon: Bell },
+    ],
+  },
+  {
+    title: 'CHANNELS & TEMPLATES',
+    items: [
+      { to: '/templates', label: 'Templates', exact: false, icon: LayoutTemplate },
+      { to: '/send', label: 'Send', exact: false, icon: Send, adminOnly: true },
+      { to: '/bulk', label: 'Bulk', exact: false, icon: Layers, adminOnly: true },
+      {
+        to: '/invitations',
+        label: 'Invitations',
+        exact: false,
+        icon: Mail,
+        badgeKey: 'invitations',
+      },
+    ],
+  },
+  {
+    title: 'DEVELOPERS',
+    items: [
+      { to: '/docs', label: 'Documentation', exact: false, icon: BookOpen },
+      { to: '/settings', label: 'Settings', exact: false, icon: Settings },
+      {
+        to: '/platform',
+        label: 'Platform',
+        exact: false,
+        icon: ShieldAlert,
+        superadminOnly: true,
+      },
+    ],
+  },
 ];
 
-function NavItem({ to, label, exact, onClick }) {
-  return (
-    <NavLink
-      to={to}
-      end={exact}
-      onClick={onClick}
-      className={({ isActive }) =>
-        `block px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-          isActive
-            ? 'bg-blue-600 text-white'
-            : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-        }`
-      }
-    >
-      {label}
-    </NavLink>
-  );
-}
-
 function RoleBadge({ role }) {
-  const styles = {
-    owner: 'bg-purple-700 text-purple-100',
-    admin: 'bg-blue-700 text-blue-100',
-    member: 'bg-gray-700 text-gray-300',
-  };
+  if (!role) return null;
   return (
-    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${styles[role] || styles.member}`}>
+    <span className="text-[11px] font-medium text-[#78716C] bg-[#F5F5F4] px-1.5 py-0.5 rounded-[4px] border border-[#E7E5E4] capitalize">
       {role}
     </span>
   );
 }
 
 export default function Layout({ children }) {
-  const { user, logout, isAdmin, isSuperadmin, workspace, workspaces, switchWorkspace } = useAuth();
-  const [open, setOpen] = useState(false);
+  const {
+    user,
+    logout,
+    isAdmin,
+    isSuperadmin,
+    workspace,
+    workspaces,
+    switchWorkspace,
+  } = useAuth();
+  const location = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [pendingInvitesCount, setPendingInvitesCount] = useState(0);
 
   // Workspace switcher
   const [switcherOpen, setSwitcherOpen] = useState(false);
@@ -61,7 +95,25 @@ export default function Layout({ children }) {
   const [createError, setCreateError] = useState(null);
   const [createLoading, setCreateLoading] = useState(false);
 
-  const visibleNav = NAV.filter((n) => (!n.adminOnly || isAdmin) && (!n.superadminOnly || isSuperadmin));
+  // Poll pending invitations count
+  useEffect(() => {
+    let mounted = true;
+    function fetchInvites() {
+      apiFetch('/invitations')
+        .then((data) => {
+          if (mounted && Array.isArray(data)) {
+            setPendingInvitesCount(data.length);
+          }
+        })
+        .catch(() => {});
+    }
+    fetchInvites();
+    const interval = setInterval(fetchInvites, 30000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [location.pathname]);
 
   // Close switcher on outside click
   useEffect(() => {
@@ -97,33 +149,61 @@ export default function Layout({ children }) {
   }
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-gray-950 text-white">
+    <div className="min-h-screen flex flex-col md:flex-row bg-[#FAFAF9] text-[#1C1917]">
       {/* Mobile top bar */}
-      <div className="md:hidden flex items-center justify-between px-4 py-3 bg-gray-900 border-b border-gray-800">
-        <span className="font-bold text-blue-400">Notify</span>
-        <button
-          onClick={() => setOpen((o) => !o)}
-          className="p-2 rounded hover:bg-gray-700"
-          aria-label="Toggle menu"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            {open ? (
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            ) : (
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+      <div className="md:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-[#E7E5E4] sticky top-0 z-30">
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded-[5px] bg-[#4F46E5] flex items-center justify-center text-white text-xs font-bold">
+            N
+          </div>
+          <span className="font-semibold text-sm tracking-tight text-[#1C1917]">
+            Notify
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Link
+            to="/invitations"
+            className="relative p-2 rounded-[6px] text-[#78716C] hover:text-[#1C1917] hover:bg-[#F5F5F4] transition-colors"
+            title="Workspace Invitations"
+            aria-label="Workspace Invitations"
+          >
+            <Mail className="w-4 h-4" strokeWidth={1.5} />
+            {pendingInvitesCount > 0 && (
+              <span className="absolute top-1 right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-[#4F46E5] text-[10px] font-semibold text-white">
+                {pendingInvitesCount}
+              </span>
             )}
-          </svg>
-        </button>
+          </Link>
+          <button
+            onClick={() => setMobileMenuOpen((o) => !o)}
+            className="p-2 rounded-[6px] text-[#78716C] hover:text-[#1C1917] hover:bg-[#F5F5F4]"
+            aria-label="Toggle menu"
+          >
+            {mobileMenuOpen ? (
+              <X className="w-5 h-5" strokeWidth={1.5} />
+            ) : (
+              <Menu className="w-5 h-5" strokeWidth={1.5} />
+            )}
+          </button>
+        </div>
       </div>
 
-      {/* Sidebar */}
+      {/* Sidebar (232px width) */}
       <aside
         className={`${
-          open ? 'block' : 'hidden'
-        } md:flex md:flex-col w-full md:w-56 bg-gray-900 border-b md:border-b-0 md:border-r border-gray-800 md:min-h-screen`}
+          mobileMenuOpen ? 'block' : 'hidden'
+        } md:flex md:flex-col w-full md:w-[232px] md:min-w-[232px] bg-white border-b md:border-b-0 md:border-r border-[#E7E5E4] md:min-h-screen shrink-0 z-20`}
       >
-        <div className="px-4 py-5 hidden md:block">
-          <span className="font-bold text-blue-400 text-lg">Notify</span>
+        {/* Logo and Wordmark */}
+        <div className="px-4 py-4.5 hidden md:flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-6 h-6 rounded-[5px] bg-[#4F46E5] flex items-center justify-center text-white text-xs font-bold shadow-xs">
+              N
+            </div>
+            <span className="font-semibold text-[15px] tracking-tight text-[#1C1917]">
+              Notify
+            </span>
+          </div>
         </div>
 
         {/* Workspace Switcher */}
@@ -131,111 +211,201 @@ export default function Layout({ children }) {
           <button
             type="button"
             onClick={() => setSwitcherOpen((o) => !o)}
-            className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-left transition-colors"
+            className="w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-[6px] bg-[#FAFAF9] hover:bg-[#F5F5F4] border border-[#E7E5E4] text-left transition-colors cursor-pointer group"
           >
-            <span className="text-sm font-medium text-white truncate">
-              {workspace?.name ?? 'No workspace'}
-            </span>
-            <div className="flex items-center gap-1.5 shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-xs font-medium text-[#1C1917] truncate">
+                {workspace?.name ?? 'No workspace'}
+              </span>
               {workspace?.role && <RoleBadge role={workspace.role} />}
-              <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
             </div>
+            <ChevronsUpDown
+              className="w-3.5 h-3.5 text-[#78716C] shrink-0 group-hover:text-[#1C1917]"
+              strokeWidth={1.5}
+            />
           </button>
 
           {switcherOpen && (
-            <div className="absolute left-3 right-3 mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-40 py-1 overflow-hidden">
-              {(workspaces || []).map((ws) => (
+            <div className="absolute left-3 right-3 mt-1.5 bg-white border border-[#E7E5E4] rounded-[8px] shadow-md z-40 py-1 overflow-hidden">
+              <div className="px-2.5 py-1 text-[11px] font-semibold text-[#78716C] uppercase tracking-wider">
+                Workspaces
+              </div>
+              <div className="max-h-48 overflow-y-auto">
+                {(workspaces || []).map((ws) => (
+                  <button
+                    key={ws.id}
+                    type="button"
+                    onClick={() => {
+                      switchWorkspace(ws.id);
+                      setSwitcherOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-2.5 py-1.5 text-xs text-left transition-colors cursor-pointer ${
+                      ws.id === workspace?.id
+                        ? 'bg-[#F5F5F4] text-[#1C1917] font-medium'
+                        : 'text-[#57534E] hover:bg-[#FAFAF9] hover:text-[#1C1917]'
+                    }`}
+                  >
+                    <span className="truncate">{ws.name}</span>
+                    {ws.id === workspace?.id && (
+                      <Check
+                        className="w-3.5 h-3.5 text-[#4F46E5] shrink-0"
+                        strokeWidth={2}
+                      />
+                    )}
+                  </button>
+                ))}
+              </div>
+              <div className="border-t border-[#E7E5E4] mt-1 pt-1">
                 <button
-                  key={ws.id}
                   type="button"
-                  onClick={() => { switchWorkspace(ws.id); setSwitcherOpen(false); }}
-                  className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-200 hover:bg-gray-700 transition-colors"
+                  onClick={() => {
+                    setCreateOpen(true);
+                    setSwitcherOpen(false);
+                  }}
+                  className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-[#4F46E5] hover:bg-[#F5F5F4] font-medium transition-colors cursor-pointer"
                 >
-                  <span className="truncate">{ws.name}</span>
-                  {ws.id === workspace?.id && (
-                    <span className="text-blue-400 text-xs ml-2">✓</span>
-                  )}
-                </button>
-              ))}
-              <div className="border-t border-gray-700 mt-1 pt-1">
-                <button
-                  type="button"
-                  onClick={() => { setCreateOpen(true); setSwitcherOpen(false); }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-blue-400 hover:bg-gray-700 transition-colors"
-                >
-                  <span>+ Create workspace</span>
+                  <Plus className="w-3.5 h-3.5" strokeWidth={1.5} />
+                  <span>Create workspace</span>
                 </button>
               </div>
             </div>
           )}
         </div>
 
-        <nav className="flex-1 px-3 pb-4 space-y-1">
-          {visibleNav.map((n) => (
-            <NavItem key={n.to} {...n} onClick={() => setOpen(false)} />
-          ))}
+        {/* Navigation Sections */}
+        <nav className="flex-1 px-3 py-2 space-y-4 overflow-y-auto">
+          {NAV_GROUPS.map((group) => {
+            const visibleItems = group.items.filter(
+              (item) =>
+                (!item.adminOnly || isAdmin) &&
+                (!item.superadminOnly || isSuperadmin)
+            );
+            if (visibleItems.length === 0) return null;
+
+            return (
+              <div key={group.title} className="space-y-1">
+                <div className="px-2.5 py-1 text-[11px] font-semibold tracking-wider text-[#A8A29E] uppercase">
+                  {group.title}
+                </div>
+                {visibleItems.map((item) => {
+                  const Icon = item.icon;
+                  const isInvitations = item.badgeKey === 'invitations';
+                  return (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      end={item.exact}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={({ isActive }) =>
+                        `flex items-center justify-between px-2.5 py-1.5 rounded-[6px] text-xs font-medium transition-colors ${
+                          isActive
+                            ? 'bg-[#F5F5F4] text-[#1C1917]'
+                            : 'text-[#78716C] hover:text-[#1C1917] hover:bg-[#FAFAF9]'
+                        }`
+                      }
+                    >
+                      {({ isActive }) => (
+                        <>
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <Icon
+                              className={`w-4 h-4 shrink-0 transition-colors ${
+                                isActive ? 'text-[#4F46E5]' : 'text-[#78716C]'
+                              }`}
+                              strokeWidth={1.5}
+                            />
+                            <span className="truncate">{item.label}</span>
+                          </div>
+                          {isInvitations && pendingInvitesCount > 0 && (
+                            <span className="ml-2 inline-flex items-center justify-center px-1.5 py-0.2 rounded-full text-[10px] font-semibold leading-none text-white bg-[#4F46E5]">
+                              {pendingInvitesCount}
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </NavLink>
+                  );
+                })}
+              </div>
+            );
+          })}
         </nav>
 
-        {/* User area */}
-        <div className="px-4 py-4 border-t border-gray-800 space-y-1">
-          <p className="text-xs text-gray-400 truncate">{user?.email}</p>
-          <button
-            onClick={logout}
-            className="mt-2 block w-full text-left px-3 py-1.5 text-sm text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
-          >
-            Log out
-          </button>
+        {/* Sidebar Footer User Area */}
+        <div className="p-3 border-t border-[#E7E5E4] space-y-2 bg-white">
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#15803D] shrink-0" />
+              <p className="text-[11px] text-[#78716C] truncate" title={user?.email}>
+                {user?.email}
+              </p>
+            </div>
+            <button
+              onClick={logout}
+              title="Log out"
+              className="p-1 rounded-[4px] text-[#78716C] hover:text-[#1C1917] hover:bg-[#F5F5F4] transition-colors cursor-pointer"
+            >
+              <LogOut className="w-3.5 h-3.5" strokeWidth={1.5} />
+            </button>
+          </div>
         </div>
       </aside>
 
-      {/* Main */}
-      <main className="flex-1 p-4 md:p-6 overflow-auto">
-        <React.Fragment key={workspace?.id}>
-          {children}
-        </React.Fragment>
+      {/* Main Content Area */}
+      <main className="flex-1 min-w-0 p-5 sm:p-7 lg:p-8 overflow-auto">
+        <div className="max-w-[1120px]">
+          <React.Fragment key={workspace?.id}>{children}</React.Fragment>
+        </div>
       </main>
 
       {/* Create Workspace Modal */}
       {createOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 z-50 flex items-center justify-center p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-xl max-w-sm w-full p-6 space-y-4 shadow-2xl">
-            <h2 className="text-lg font-semibold text-white">Create workspace</h2>
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-[#E7E5E4] rounded-[12px] max-w-sm w-full p-6 space-y-4 shadow-xl">
+            <div>
+              <h2 className="text-base font-semibold text-[#1C1917]">
+                Create workspace
+              </h2>
+              <p className="text-xs text-[#78716C] mt-0.5">
+                Workspaces keep notifications, API keys, and team members isolated.
+              </p>
+            </div>
             <form onSubmit={handleCreateWorkspace} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1" htmlFor="ws-name">
-                  Workspace name
-                </label>
-                <input
-                  id="ws-name"
-                  type="text"
-                  required
-                  value={createName}
-                  onChange={(e) => setCreateName(e.target.value)}
-                  placeholder="My workspace"
-                  className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
-                  autoFocus
-                />
-              </div>
+              <Input
+                id="ws-name"
+                label="Workspace name"
+                type="text"
+                required
+                value={createName}
+                onChange={(e) => setCreateName(e.target.value)}
+                placeholder="Acme Corp"
+                autoFocus
+              />
               {createError && (
-                <p className="text-sm text-red-400">{createError}</p>
+                <p className="text-xs text-[#B91C1C]">{createError}</p>
               )}
-              <div className="flex gap-3 pt-1">
-                <button
-                  type="button"
-                  onClick={() => { setCreateOpen(false); setCreateName(''); setCreateError(null); }}
-                  className="flex-1 px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-medium transition-colors"
+              <div className="flex gap-2.5 pt-1">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => {
+                    setCreateOpen(false);
+                    setCreateName('');
+                    setCreateError(null);
+                  }}
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
-                  disabled={createLoading || !createName.trim()}
-                  className="flex-1 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium transition-colors"
+                  variant="primary"
+                  size="sm"
+                  className="flex-1"
+                  loading={createLoading}
+                  disabled={!createName.trim()}
                 >
-                  {createLoading ? 'Creating…' : 'Create'}
-                </button>
+                  Create
+                </Button>
               </div>
             </form>
           </div>

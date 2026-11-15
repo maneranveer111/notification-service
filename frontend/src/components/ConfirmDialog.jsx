@@ -1,4 +1,6 @@
 import { useEffect, useRef } from 'react';
+import { AlertTriangle } from 'lucide-react';
+import Button from './ui/Button';
 
 export default function ConfirmDialog({
   open,
@@ -9,13 +11,16 @@ export default function ConfirmDialog({
   loading = false,
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
+  destructive = false,
 }) {
   const cancelRef = useRef(null);
 
   useEffect(() => {
     if (!open) return;
     cancelRef.current?.focus();
-    const onKey = (e) => { if (e.key === 'Escape') onCancel(); };
+    const onKey = (e) => {
+      if (e.key === 'Escape') onCancel();
+    };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [open, onCancel]);
@@ -24,35 +29,47 @@ export default function ConfirmDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-      onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onCancel();
+      }}
     >
       <div
         role="dialog"
         aria-modal="true"
-        className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl p-6 w-full max-w-sm mx-4"
+        className="bg-white border border-[#E7E5E4] rounded-[12px] shadow-lg p-6 w-full max-w-sm mx-4 space-y-4"
       >
-        <h2 className="text-lg font-semibold mb-2">{title}</h2>
-        <p className="text-sm text-gray-400 mb-6">{message}</p>
-        <div className="flex justify-end gap-3">
-          <button
+        <div className="flex items-start gap-3">
+          {destructive && (
+            <div className="w-8 h-8 rounded-full bg-[#FEF2F2] border border-[#FECACA] flex items-center justify-center text-[#B91C1C] shrink-0 mt-0.5">
+              <AlertTriangle className="w-4 h-4" strokeWidth={1.5} />
+            </div>
+          )}
+          <div>
+            <h2 className="text-base font-semibold text-[#1C1917]">{title}</h2>
+            <p className="text-xs text-[#78716C] mt-1">{message}</p>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2.5 pt-2">
+          <Button
             ref={cancelRef}
+            variant="secondary"
+            size="sm"
             onClick={onCancel}
             disabled={loading}
-            className="px-4 py-2 rounded-lg text-sm bg-gray-700 hover:bg-gray-600 disabled:opacity-50"
           >
             {cancelLabel}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant={destructive ? 'destructive-filled' : 'primary'}
+            size="sm"
             onClick={onConfirm}
-            disabled={loading}
-            className="px-4 py-2 rounded-lg text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 font-medium"
+            loading={loading}
           >
-            {loading ? 'Working…' : confirmLabel}
-          </button>
+            {confirmLabel}
+          </Button>
         </div>
       </div>
     </div>
   );
 }
-

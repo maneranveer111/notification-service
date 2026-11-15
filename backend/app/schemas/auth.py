@@ -29,6 +29,7 @@ class TokenResponse(BaseModel):
     user: UserAuthInfo
     workspace: WorkspaceInfo | None = None
     is_superadmin: bool = False
+    workspaces: list[WorkspaceInfo] = []
 
 
 class AuthMeResponse(BaseModel):

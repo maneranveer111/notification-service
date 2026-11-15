@@ -1,45 +1,71 @@
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+
 const PAGE_SIZES = [25, 50, 100];
 
-export default function Pagination({ total, page, pageSize, onPageChange, onPageSizeChange }) {
+export default function Pagination({
+  total,
+  page,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
+  className = '',
+}) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
-  const to = Math.min(page * pageSize, total);
+  const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const end = Math.min(total, page * pageSize);
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-gray-400">
-      <span>
-        {total === 0 ? 'No results' : `Showing ${from}–${to} of ${total}`}
-      </span>
-      <div className="flex items-center gap-3">
-        <label className="flex items-center gap-1">
-          Rows:
+    <div
+      className={`flex flex-col sm:flex-row items-center justify-between gap-4 px-4 py-3 bg-white border-t border-[#E7E5E4] text-xs text-[#78716C] ${className}`}
+    >
+      <div className="flex items-center gap-2">
+        <span>
+          Showing <span className="font-medium text-[#1C1917]">{start}</span>–
+          <span className="font-medium text-[#1C1917]">{end}</span> of{' '}
+          <span className="font-medium text-[#1C1917]">{total}</span>
+        </span>
+      </div>
+
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          <span>Rows per page:</span>
           <select
             value={pageSize}
             onChange={(e) => onPageSizeChange(Number(e.target.value))}
-            className="ml-1 bg-gray-800 border border-gray-600 rounded px-2 py-0.5 text-gray-200"
+            className="rounded-[4px] border border-[#E7E5E4] bg-white px-2 py-1 text-xs text-[#1C1917] focus:outline-none focus:border-[#4F46E5]"
           >
-            {PAGE_SIZES.map((s) => <option key={s} value={s}>{s}</option>)}
+            {PAGE_SIZES.map((size) => (
+              <option key={size} value={size}>
+                {size}
+              </option>
+            ))}
           </select>
-        </label>
+        </div>
+
         <div className="flex items-center gap-1">
           <button
-            disabled={page <= 1}
+            type="button"
             onClick={() => onPageChange(page - 1)}
-            className="px-2 py-1 rounded bg-gray-800 border border-gray-600 disabled:opacity-40 hover:bg-gray-700"
+            disabled={page <= 1}
+            className="p-1 rounded-[4px] border border-[#E7E5E4] text-[#1C1917] hover:bg-[#F5F5F4] disabled:opacity-40 disabled:pointer-events-none transition-colors"
+            aria-label="Previous page"
           >
-            ‹
+            <ChevronLeft className="w-4 h-4" strokeWidth={1.5} />
           </button>
-          <span className="px-2">{page} / {totalPages}</span>
+          <span className="px-2 font-mono text-[11px] text-[#1C1917]">
+            {page} / {totalPages}
+          </span>
           <button
-            disabled={page >= totalPages}
+            type="button"
             onClick={() => onPageChange(page + 1)}
-            className="px-2 py-1 rounded bg-gray-800 border border-gray-600 disabled:opacity-40 hover:bg-gray-700"
+            disabled={page >= totalPages}
+            className="p-1 rounded-[4px] border border-[#E7E5E4] text-[#1C1917] hover:bg-[#F5F5F4] disabled:opacity-40 disabled:pointer-events-none transition-colors"
+            aria-label="Next page"
           >
-            ›
+            <ChevronRight className="w-4 h-4" strokeWidth={1.5} />
           </button>
         </div>
       </div>
     </div>
   );
 }
-

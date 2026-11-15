@@ -7,6 +7,7 @@ import VerifyEmailPage from './pages/VerifyEmailPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import AcceptInvitePage from './pages/AcceptInvitePage';
+import InvitationsPage from './pages/InvitationsPage';
 import LandingPage from './pages/LandingPage';
 import DocsPage from './pages/DocsPage';
 import OverviewPage from './pages/OverviewPage';
@@ -50,6 +51,16 @@ export default function App() {
       <Route path="/accept-invite" element={<AcceptInvitePage />} />
       <Route path="/" element={<HomeRoute />} />
       <Route path="/docs" element={<DocsPage />} />
+      <Route
+        path="/invitations"
+        element={
+          <RequireAuth>
+            <Layout>
+              <InvitationsPage />
+            </Layout>
+          </RequireAuth>
+        }
+      />
       <Route
         path="/notifications"
         element={

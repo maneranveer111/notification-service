@@ -1,4 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
+import {
+  Key,
+  Plus,
+  Copy,
+  Check,
+  X,
+} from 'lucide-react';
 import { apiFetch, absoluteApiBase } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { describeError } from '../../lib/errors';
@@ -6,7 +13,9 @@ import ConfirmDialog from '../../components/ConfirmDialog';
 import ErrorBanner from '../../components/ErrorBanner';
 import Loading from '../../components/Loading';
 import EmptyState from '../../components/EmptyState';
-
+import Button from '../../components/ui/Button';
+import Input from '../../components/ui/Input';
+import Badge from '../../components/ui/Badge';
 
 function OneTimeKeyDialog({ apiKey, onClose }) {
   const [copied, setCopied] = useState(false);
@@ -19,34 +28,44 @@ function OneTimeKeyDialog({ apiKey, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="bg-gray-900 border border-yellow-700 rounded-xl w-full max-w-md shadow-2xl p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-white">Save your API key</h2>
-
-        <div className="px-4 py-3 rounded-lg bg-yellow-900/30 border border-yellow-700 text-yellow-300 text-sm">
-          ⚠ This key will only be shown once. Copy it now and store it safely.
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white border border-[#E7E5E4] rounded-[12px] w-full max-w-md shadow-xl p-6 space-y-4">
+        <div className="flex items-start gap-3">
+          <div className="w-8 h-8 rounded-full bg-[#FEFCE8] border border-[#FEF08A] flex items-center justify-center text-[#A16207] shrink-0 mt-0.5">
+            <Key className="w-4 h-4" strokeWidth={1.5} />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-[#1C1917]">
+              Save your API key
+            </h2>
+            <p className="text-xs text-[#78716C] mt-0.5">
+              This secret key is only shown once. Store it in a secure environment variable.
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <code className="flex-1 text-sm text-green-300 bg-gray-800 px-3 py-2 rounded-lg font-mono break-all">
+          <code className="flex-1 text-xs font-mono text-[#1C1917] bg-[#FAFAF9] border border-[#E7E5E4] px-3 py-2 rounded-[6px] break-all select-all">
             {apiKey}
           </code>
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={handleCopy}
-            className="shrink-0 px-3 py-1.5 text-xs rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 font-medium"
+            icon={copied ? Check : Copy}
           >
-            {copied ? 'Copied!' : 'Copy'}
-          </button>
+            {copied ? 'Copied' : 'Copy'}
+          </Button>
         </div>
 
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          size="sm"
+          className="w-full"
           onClick={onClose}
-          className="w-full px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium"
         >
-          I saved the key
-        </button>
+          I have stored this key
+        </Button>
       </div>
     </div>
   );
@@ -82,56 +101,68 @@ function CreateModal({ onClose, onCreated }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-sm shadow-2xl p-6 space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white border border-[#E7E5E4] rounded-[12px] w-full max-w-sm shadow-xl p-6 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">Create API Key</h2>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-200 text-xl" aria-label="Close">×</button>
+          <h2 className="text-base font-semibold text-[#1C1917]">
+            Generate API Key
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 rounded text-[#78716C] hover:text-[#1C1917]"
+          >
+            <X className="w-4 h-4" strokeWidth={1.5} />
+          </button>
         </div>
 
         {error && (
-          <div className="px-4 py-3 rounded-lg bg-red-900/30 border border-red-700 text-red-300 text-sm">
+          <div className="px-3.5 py-2.5 rounded-[6px] bg-[#FEF2F2] border border-[#FECACA] text-[#B91C1C] text-xs">
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="key-name" className="block text-sm font-medium text-gray-300 mb-1">
-              Name *
-            </label>
-            <input
-              id="key-name"
-              type="text"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
-              placeholder="My integration"
-              autoFocus
-            />
-          </div>
-          <div>
-            <label htmlFor="key-rate-limit" className="block text-sm font-medium text-gray-300 mb-1">
-              Rate limit per minute (optional)
-            </label>
-            <input
-              id="key-rate-limit"
-              type="number"
-              min="1"
-              value={rateLimit}
-              onChange={(e) => setRateLimit(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
-              placeholder="60"
-            />
-          </div>
-          <div className="flex gap-3 pt-1">
-            <button type="button" onClick={onClose} disabled={loading} className="flex-1 px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-gray-300 text-sm font-medium">
+          <Input
+            id="key-name"
+            label="Key Name *"
+            type="text"
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Production Backend"
+            autoFocus
+          />
+          <Input
+            id="key-rate-limit"
+            label="Rate Limit per Minute"
+            type="number"
+            min="1"
+            value={rateLimit}
+            onChange={(e) => setRateLimit(e.target.value)}
+            placeholder="60"
+            helper="Default is 60 requests/minute per client key."
+          />
+          <div className="flex gap-2.5 pt-1">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="flex-1"
+              onClick={onClose}
+              disabled={loading}
+            >
               Cancel
-            </button>
-            <button type="submit" disabled={loading || !name.trim()} className="flex-1 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium">
-              {loading ? 'Creating…' : 'Create'}
-            </button>
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              className="flex-1"
+              loading={loading}
+              disabled={!name.trim()}
+            >
+              Generate
+            </Button>
           </div>
         </form>
       </div>
@@ -146,16 +177,30 @@ function UsageModal({ clientId, onClose }) {
 
   useEffect(() => {
     apiFetch(`/admin/clients/${clientId}/usage`)
-      .then((d) => { setUsage(d); setLoading(false); })
-      .catch((e) => { setError(e); setLoading(false); });
+      .then((d) => {
+        setUsage(d);
+        setLoading(false);
+      })
+      .catch((e) => {
+        setError(e);
+        setLoading(false);
+      });
   }, [clientId]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-sm shadow-2xl p-6 space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white border border-[#E7E5E4] rounded-[12px] w-full max-w-sm shadow-xl p-6 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">Key Usage</h2>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-200 text-xl" aria-label="Close">×</button>
+          <h2 className="text-base font-semibold text-[#1C1917]">
+            API Key Usage
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 rounded text-[#78716C] hover:text-[#1C1917]"
+          >
+            <X className="w-4 h-4" strokeWidth={1.5} />
+          </button>
         </div>
 
         {loading ? (
@@ -164,21 +209,27 @@ function UsageModal({ clientId, onClose }) {
           <ErrorBanner error={error} />
         ) : usage ? (
           <div className="space-y-3">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-400">Total requests</span>
-              <span className="text-white font-medium">{usage.total}</span>
+            <div className="flex justify-between py-1.5 border-b border-[#E7E5E4] text-xs">
+              <span className="text-[#78716C]">Total Requests</span>
+              <span className="font-semibold text-[#1C1917]">
+                {usage.total?.toLocaleString() ?? 0}
+              </span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-400">Last 24 hours</span>
-              <span className="text-white font-medium">{usage.last_24_hours}</span>
+            <div className="flex justify-between py-1.5 border-b border-[#E7E5E4] text-xs">
+              <span className="text-[#78716C]">Last 24 Hours</span>
+              <span className="font-semibold text-[#1C1917]">
+                {usage.last_24_hours?.toLocaleString() ?? 0}
+              </span>
             </div>
             {usage.by_status && Object.keys(usage.by_status).length > 0 && (
-              <div className="border-t border-gray-800 pt-3 space-y-1">
-                <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">By status</p>
+              <div className="pt-2 space-y-1.5">
+                <p className="text-[11px] font-semibold text-[#78716C] uppercase tracking-wider">
+                  By Status
+                </p>
                 {Object.entries(usage.by_status).map(([status, count]) => (
-                  <div key={status} className="flex justify-between text-sm">
-                    <span className="text-gray-400 capitalize">{status}</span>
-                    <span className="text-white">{count}</span>
+                  <div key={status} className="flex justify-between text-xs">
+                    <span className="text-[#78716C] capitalize">{status}</span>
+                    <span className="font-medium text-[#1C1917]">{count}</span>
                   </div>
                 ))}
               </div>
@@ -186,69 +237,117 @@ function UsageModal({ clientId, onClose }) {
           </div>
         ) : null}
 
-        <button type="button" onClick={onClose} className="w-full px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium">
+        <Button
+          variant="secondary"
+          size="sm"
+          className="w-full"
+          onClick={onClose}
+        >
           Close
-        </button>
+        </Button>
       </div>
     </div>
   );
 }
 
-function HowToUseBox() {
+function CodeIntegrationSnippet() {
+  const [activeTab, setActiveTab] = useState('curl');
+  const [copied, setCopied] = useState(false);
   const API_BASE = absoluteApiBase();
-  const curlExample = `curl -X POST ${API_BASE}/notifications/email \\
-  -H "X-API-Key: <your-key>" \\
-  -H "Content-Type: application/json" \\
-  -d '{"recipient":"user@example.com","subject":"Hello","body":"World"}'`;
 
-  const templateExample = `curl -X POST ${API_BASE}/notifications/email \\
-  -H "X-API-Key: <your-key>" \\
+  const snippets = {
+    curl: `curl -X POST ${API_BASE}/notifications/email \\
+  -H "X-API-Key: YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
-  -H "Idempotency-Key: unique-request-id" \\
-  -d '{"recipient":"user@example.com","template_id":"tmpl_xxx","variables":{"name":"Alice"}}'`;
+  -d '{
+    "recipient": "user@example.com",
+    "subject": "Order Confirmed",
+    "body": "Thank you for your order."
+  }'`,
+    node: `import fetch from 'node-fetch';
 
-  const [copiedCurl, setCopiedCurl] = useState(false);
-  const [copiedTemplate, setCopiedTemplate] = useState(false);
+const res = await fetch('${API_BASE}/notifications/email', {
+  method: 'POST',
+  headers: {
+    'X-API-Key': process.env.NOTIFY_API_KEY,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    recipient: 'user@example.com',
+    subject: 'Order Confirmed',
+    body: 'Thank you for your order.',
+  }),
+});
+const data = await res.json();
+console.log(data);`,
+    python: `import requests
+
+res = requests.post(
+    "${API_BASE}/notifications/email",
+    headers={
+        "X-API-Key": "YOUR_API_KEY",
+        "Content-Type": "application/json",
+    },
+    json={
+        "recipient": "user@example.com",
+        "subject": "Order Confirmed",
+        "body": "Thank you for your order.",
+    },
+)
+print(res.json())`,
+  };
+
+  const code = snippets[activeTab];
+
+  function handleCopy() {
+    navigator.clipboard.writeText(code).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
-      <h3 className="font-semibold text-white">How to use</h3>
-
-      <div className="space-y-2">
-        <p className="text-sm text-gray-400">Basic email send:</p>
-        <div className="relative">
-          <pre className="bg-gray-800 text-green-300 text-xs rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all">
-            {curlExample}
-          </pre>
-          <button
-            type="button"
-            onClick={() => navigator.clipboard.writeText(curlExample).then(() => { setCopiedCurl(true); setTimeout(() => setCopiedCurl(false), 2000); })}
-            className="absolute top-2 right-2 px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs"
-          >
-            {copiedCurl ? 'Copied!' : 'Copy'}
-          </button>
+    <div className="bg-[#18181B] border border-[#27272A] rounded-[8px] overflow-hidden text-xs">
+      {/* Header with tabs */}
+      <div className="flex items-center justify-between px-3 py-2 bg-[#27272A]/50 border-b border-[#27272A]">
+        <div className="flex items-center gap-1">
+          {['curl', 'node', 'python'].map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              className={`px-2.5 py-1 rounded-[4px] font-mono text-[11px] font-medium transition-colors cursor-pointer ${
+                activeTab === tab
+                  ? 'bg-[#3F3F46] text-white'
+                  : 'text-[#A1A1AA] hover:text-[#D4D4D8] hover:bg-[#27272A]'
+              }`}
+            >
+              {tab === 'curl' ? 'cURL' : tab === 'node' ? 'Node.js' : 'Python'}
+            </button>
+          ))}
         </div>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="flex items-center gap-1.5 px-2 py-1 rounded-[4px] bg-[#27272A] hover:bg-[#3F3F46] text-[#D4D4D8] transition-colors text-[11px]"
+        >
+          {copied ? (
+            <>
+              <Check className="w-3.5 h-3.5 text-emerald-400" strokeWidth={2} />
+              <span className="text-emerald-400">Copied</span>
+            </>
+          ) : (
+            <>
+              <Copy className="w-3.5 h-3.5" strokeWidth={1.5} />
+              <span>Copy</span>
+            </>
+          )}
+        </button>
       </div>
 
-      <div className="space-y-2">
-        <p className="text-sm text-gray-400">With template + idempotency key:</p>
-        <div className="relative">
-          <pre className="bg-gray-800 text-green-300 text-xs rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all">
-            {templateExample}
-          </pre>
-          <button
-            type="button"
-            onClick={() => navigator.clipboard.writeText(templateExample).then(() => { setCopiedTemplate(true); setTimeout(() => setCopiedTemplate(false), 2000); })}
-            className="absolute top-2 right-2 px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs"
-          >
-            {copiedTemplate ? 'Copied!' : 'Copy'}
-          </button>
-        </div>
+      <div className="p-4 overflow-x-auto font-mono text-[#E4E4E7] leading-relaxed">
+        <pre className="whitespace-pre">{code}</pre>
       </div>
-
-      <p className="text-xs text-gray-500">
-        Add an <code className="text-gray-300">Idempotency-Key</code> header with a unique ID per request to safely retry without duplicates.
-      </p>
     </div>
   );
 }
@@ -261,9 +360,15 @@ export default function ApiKeysPage() {
 
   const [showCreate, setShowCreate] = useState(false);
   const [oneTimeKey, setOneTimeKey] = useState(null);
-  const [rotateConfirm, setRotateConfirm] = useState({ open: false, client: null });
+  const [rotateConfirm, setRotateConfirm] = useState({
+    open: false,
+    client: null,
+  });
   const [rotateLoading, setRotateLoading] = useState(false);
-  const [revokeConfirm, setRevokeConfirm] = useState({ open: false, client: null });
+  const [revokeConfirm, setRevokeConfirm] = useState({
+    open: false,
+    client: null,
+  });
   const [revokeLoading, setRevokeLoading] = useState(false);
   const [usageModal, setUsageModal] = useState({ open: false, clientId: null });
 
@@ -280,7 +385,9 @@ export default function ApiKeysPage() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   function handleCreated(res) {
     setShowCreate(false);
@@ -292,7 +399,9 @@ export default function ApiKeysPage() {
     const id = rotateConfirm.client?.id;
     setRotateLoading(true);
     try {
-      const res = await apiFetch(`/admin/clients/${id}/rotate`, { method: 'POST' });
+      const res = await apiFetch(`/admin/clients/${id}/rotate`, {
+        method: 'POST',
+      });
       setRotateConfirm({ open: false, client: null });
       setOneTimeKey(res.api_key);
       load();
@@ -319,16 +428,23 @@ export default function ApiKeysPage() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-base font-semibold text-white">API Keys</h2>
+        <div>
+          <h2 className="text-base font-semibold text-[#1C1917]">API Keys</h2>
+          <p className="text-xs text-[#78716C] mt-0.5">
+            Authenticate programmatic dispatch via the REST API.
+          </p>
+        </div>
         {isAdmin && (
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="sm"
             onClick={() => setShowCreate(true)}
-            className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors"
+            icon={Plus}
           >
-            + Create key
-          </button>
+            Generate Key
+          </Button>
         )}
       </div>
 
@@ -337,83 +453,130 @@ export default function ApiKeysPage() {
       {loading ? (
         <Loading text="Loading keys…" />
       ) : clients.length === 0 ? (
-        <EmptyState message="No API keys yet. Create one to start integrating." />
+        <EmptyState
+          icon={Key}
+          title="No API keys"
+          message="Generate an API key to authenticate requests from your backend microservices."
+          action={
+            isAdmin && (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setShowCreate(true)}
+                icon={Plus}
+              >
+                Generate First Key
+              </Button>
+            )
+          }
+        />
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[700px]">
-            <thead>
-              <tr className="text-left text-xs text-gray-400 uppercase tracking-wide border-b border-gray-800">
-                <th className="pb-3 pr-4">Name</th>
-                <th className="pb-3 pr-4">Key Prefix</th>
-                <th className="pb-3 pr-4">Status</th>
-                <th className="pb-3 pr-4">Rate limit/min</th>
-                <th className="pb-3 pr-4">Last used</th>
-                <th className="pb-3 pr-4">Created</th>
-                {isAdmin && <th className="pb-3">Actions</th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-800">
-              {clients.map((client) => (
-                <tr key={client.id} className="text-gray-300">
-                  <td className="py-3 pr-4 font-medium text-white">{client.name}</td>
-                  <td className="py-3 pr-4">
-                    <code className="text-xs bg-gray-800 px-2 py-0.5 rounded text-green-300">{client.key_prefix}…</code>
-                  </td>
-                  <td className="py-3 pr-4">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                      client.is_active
-                        ? 'bg-green-800 text-green-200'
-                        : 'bg-red-900 text-red-300'
-                    }`}>
-                      {client.is_active ? 'Active' : 'Revoked'}
-                    </span>
-                  </td>
-                  <td className="py-3 pr-4">{client.rate_limit_per_minute ?? '—'}</td>
-                  <td className="py-3 pr-4 text-gray-400">
-                    {client.last_used_at ? new Date(client.last_used_at).toLocaleString() : '—'}
-                  </td>
-                  <td className="py-3 pr-4 text-gray-400">
-                    {new Date(client.created_at).toLocaleDateString()}
-                  </td>
-                  {isAdmin && (
-                    <td className="py-3">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <button
-                          type="button"
-                          onClick={() => setUsageModal({ open: true, clientId: client.id })}
-                          className="px-2 py-1 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-300"
-                        >
-                          Usage
-                        </button>
-                        {client.is_active && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => setRotateConfirm({ open: true, client })}
-                              className="px-2 py-1 text-xs rounded bg-amber-800 hover:bg-amber-700 text-amber-200"
-                            >
-                              Rotate
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setRevokeConfirm({ open: true, client })}
-                              className="px-2 py-1 text-xs rounded bg-red-900 hover:bg-red-800 text-red-200"
-                            >
-                              Revoke
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  )}
+        <div className="bg-white border border-[#E7E5E4] rounded-[8px] overflow-hidden shadow-xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs min-w-[700px]">
+              <thead className="bg-[#FAFAF9] border-b border-[#E7E5E4] text-[11px] font-semibold text-[#78716C] uppercase tracking-wider">
+                <tr>
+                  <th className="px-5 py-3">Name</th>
+                  <th className="px-5 py-3">Prefix</th>
+                  <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3">Rate Limit</th>
+                  <th className="px-5 py-3">Last Used</th>
+                  <th className="px-5 py-3">Created</th>
+                  {isAdmin && <th className="px-5 py-3 text-right">Actions</th>}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-[#E7E5E4]">
+                {clients.map((client) => (
+                  <tr
+                    key={client.id}
+                    className="hover:bg-[#FAFAF9]/60 transition-colors h-[44px]"
+                  >
+                    <td className="px-5 py-3 font-medium text-[#1C1917]">
+                      {client.name}
+                    </td>
+                    <td className="px-5 py-3 font-mono text-[11px] text-[#78716C]">
+                      <span className="bg-[#F5F5F4] px-1.5 py-0.5 rounded border border-[#E7E5E4]">
+                        {client.key_prefix}••••
+                      </span>
+                    </td>
+                    <td className="px-5 py-3">
+                      <Badge
+                        variant={client.is_active ? 'success' : 'error'}
+                        dot
+                        size="sm"
+                      >
+                        {client.is_active ? 'Active' : 'Revoked'}
+                      </Badge>
+                    </td>
+                    <td className="px-5 py-3 text-[#78716C]">
+                      {client.rate_limit_per_minute
+                        ? `${client.rate_limit_per_minute}/min`
+                        : 'Default'}
+                    </td>
+                    <td className="px-5 py-3 text-[#78716C]">
+                      {client.last_used_at
+                        ? new Date(client.last_used_at).toLocaleDateString()
+                        : 'Never'}
+                    </td>
+                    <td className="px-5 py-3 text-[#78716C]">
+                      {new Date(client.created_at).toLocaleDateString()}
+                    </td>
+                    {isAdmin && (
+                      <td className="px-5 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              setUsageModal({ open: true, clientId: client.id })
+                            }
+                          >
+                            Usage
+                          </Button>
+                          {client.is_active && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  setRotateConfirm({ open: true, client })
+                                }
+                              >
+                                Rotate
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-[#B91C1C] hover:text-[#991B1B] hover:bg-[#FEF2F2]"
+                                onClick={() =>
+                                  setRevokeConfirm({ open: true, client })
+                                }
+                              >
+                                Revoke
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
-      <HowToUseBox />
+      {/* Integration Code Snippet Card */}
+      <div className="space-y-2">
+        <h3 className="text-sm font-semibold text-[#1C1917]">
+          Quickstart Code Examples
+        </h3>
+        <p className="text-xs text-[#78716C]">
+          Dispatch notifications directly through standard HTTP clients or your preferred programming language.
+        </p>
+        <CodeIntegrationSnippet />
+      </div>
 
       {showCreate && (
         <CreateModal
@@ -431,8 +594,9 @@ export default function ApiKeysPage() {
 
       <ConfirmDialog
         open={rotateConfirm.open}
+        destructive
         title="Rotate API key?"
-        message={`A new key will be issued for "${rotateConfirm.client?.name}". The existing key stops working immediately.`}
+        message={`A new key will be generated for "${rotateConfirm.client?.name}". The existing secret stops working immediately.`}
         confirmLabel="Rotate"
         loading={rotateLoading}
         onConfirm={handleRotate}
@@ -441,9 +605,10 @@ export default function ApiKeysPage() {
 
       <ConfirmDialog
         open={revokeConfirm.open}
+        destructive
         title="Revoke API key?"
-        message={`"${revokeConfirm.client?.name}" will be permanently revoked. This cannot be undone.`}
-        confirmLabel="Revoke"
+        message={`"${revokeConfirm.client?.name}" will be permanently deactivated. Any backend calls using it will fail.`}
+        confirmLabel="Revoke Key"
         loading={revokeLoading}
         onConfirm={handleRevoke}
         onCancel={() => setRevokeConfirm({ open: false, client: null })}

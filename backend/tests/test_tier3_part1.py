@@ -469,6 +469,8 @@ def test_viewer_jwt_cannot_call_any_non_get_route():
                 "/auth/reset-password",
                 "/auth/accept-invitation",
                 "/auth/change-password",
+                "/invitations/{id}/accept",
+                "/invitations/{id}/decline",
             ):
                 continue
             path = re.sub(r"\{[^}]+\}", dummy_uuid, route.path)

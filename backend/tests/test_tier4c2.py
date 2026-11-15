@@ -2,7 +2,7 @@
 Tier 4C2 tests: Plans/Quotas, Resource Limits, GET /usage, and Turnstile CAPTCHA.
 """
 import contextlib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import secrets
 from unittest.mock import MagicMock, patch
 import uuid
@@ -383,7 +383,7 @@ def test_scheduled_notification_counted_at_creation(db):
     r = get_redis_client()
     r.delete(key_d)
 
-    future_iso = "2026-11-10T12:00:00Z"
+    future_iso = (now + timedelta(days=2)).isoformat()
     resp = client.post(
         "/notifications/email",
         headers=h,

@@ -11,7 +11,7 @@ from app.database import get_db
 from app.models.invitation import Invitation
 from app.models.user import User
 from app.models.workspace import Membership, Workspace
-from app.security import Principal, require_admin
+from app.security import Principal, get_user_principal, require_admin
 from app.services.account_emails import invitation_email
 from app.services.action_tokens import make_invite_token
 from app.services.plans import get_plan
@@ -36,6 +36,7 @@ class InvitationRead(BaseModel):
     email: str
     role: str
     invited_by: UUID
+    invited_by_email: str | None = None
     status: str
     expires_at: datetime
     created_at: datetime
@@ -104,21 +105,26 @@ def create_invitation(
                 detail="User is already a member of this workspace",
             )
 
+    now = datetime.now(timezone.utc)
+
     # Check for existing pending invitation
     existing_inv = db.scalar(
         select(Invitation).where(
             Invitation.workspace_id == principal.workspace_id,
-            Invitation.email == target_email,
+            func.lower(func.trim(Invitation.email)) == target_email,
             Invitation.status == "pending",
         )
     )
     if existing_inv:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="An invitation is already pending for this email",
-        )
+        if existing_inv.expires_at <= now:
+            existing_inv.status = "expired"
+            db.commit()
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="An invitation is already pending for this email",
+            )
 
-    now = datetime.now(timezone.utc)
     invitation = Invitation(
         workspace_id=principal.workspace_id,
         email=target_email,
@@ -144,20 +150,65 @@ def create_invitation(
     )
     queue_system_email(to=target_email, subject=subject, body=body)
 
-    return invitation
+    return InvitationRead(
+        id=invitation.id,
+        workspace_id=invitation.workspace_id,
+        email=invitation.email,
+        role=invitation.role,
+        invited_by=invitation.invited_by,
+        invited_by_email=principal.email,
+        status=invitation.status,
+        expires_at=invitation.expires_at,
+        created_at=invitation.created_at,
+        accepted_at=invitation.accepted_at,
+    )
 
 
 @router.get("", response_model=list[InvitationRead])
 def list_invitations(
+    status: str | None = None,
     principal: Principal = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    invitations = db.execute(
-        select(Invitation)
-        .where(Invitation.workspace_id == principal.workspace_id)
-        .order_by(Invitation.created_at.desc())
+    now = datetime.now(timezone.utc)
+    # Transition expired pending invitations to "expired"
+    expired_invs = db.execute(
+        select(Invitation).where(
+            Invitation.workspace_id == principal.workspace_id,
+            Invitation.status == "pending",
+            Invitation.expires_at <= now,
+        )
     ).scalars().all()
-    return list(invitations)
+    if expired_invs:
+        for inv in expired_invs:
+            inv.status = "expired"
+        db.commit()
+
+    query = select(Invitation).where(Invitation.workspace_id == principal.workspace_id)
+    if status:
+        query = query.where(Invitation.status == status)
+    invitations = db.execute(
+        query.order_by(Invitation.created_at.desc())
+    ).scalars().all()
+
+    result = []
+    for inv in invitations:
+        inviter = db.get(User, inv.invited_by)
+        result.append(
+            InvitationRead(
+                id=inv.id,
+                workspace_id=inv.workspace_id,
+                email=inv.email,
+                role=inv.role,
+                invited_by=inv.invited_by,
+                invited_by_email=inviter.email if inviter else None,
+                status=inv.status,
+                expires_at=inv.expires_at,
+                created_at=inv.created_at,
+                accepted_at=inv.accepted_at,
+            )
+        )
+    return result
 
 
 @router.post("/{id}/resend", response_model=InvitationRead)
@@ -170,13 +221,14 @@ def resend_invitation(
     if not invitation or invitation.workspace_id != principal.workspace_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found")
 
-    if invitation.status != "pending":
+    if invitation.status not in ("pending", "expired"):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Only pending invitations can be resent",
         )
 
     now = datetime.now(timezone.utc)
+    invitation.status = "pending"
     invitation.expires_at = now + timedelta(days=7)
     db.commit()
     db.refresh(invitation)
@@ -194,7 +246,19 @@ def resend_invitation(
     )
     queue_system_email(to=invitation.email, subject=subject, body=body)
 
-    return invitation
+    inviter = db.get(User, invitation.invited_by)
+    return InvitationRead(
+        id=invitation.id,
+        workspace_id=invitation.workspace_id,
+        email=invitation.email,
+        role=invitation.role,
+        invited_by=invitation.invited_by,
+        invited_by_email=inviter.email if inviter else None,
+        status=invitation.status,
+        expires_at=invitation.expires_at,
+        created_at=invitation.created_at,
+        accepted_at=invitation.accepted_at,
+    )
 
 
 @router.delete("/{id}", response_model=InvitationRead)
@@ -217,4 +281,216 @@ def revoke_invitation(
     db.commit()
     db.refresh(invitation)
 
-    return invitation
+    inviter = db.get(User, invitation.invited_by)
+    return InvitationRead(
+        id=invitation.id,
+        workspace_id=invitation.workspace_id,
+        email=invitation.email,
+        role=invitation.role,
+        invited_by=invitation.invited_by,
+        invited_by_email=inviter.email if inviter else None,
+        status=invitation.status,
+        expires_at=invitation.expires_at,
+        created_at=invitation.created_at,
+        accepted_at=invitation.accepted_at,
+    )
+
+
+# ---------------------------------------------------------------------------
+# In-app user invitations (Inbox)
+# ---------------------------------------------------------------------------
+
+user_invitations_router = APIRouter(
+    prefix="/invitations",
+    tags=["User Invitations"],
+)
+
+
+class UserInvitationRead(BaseModel):
+    id: UUID
+    workspace_id: UUID
+    workspace_name: str
+    role: str
+    status: str
+    invited_by_email: str | None = None
+    created_at: datetime
+    expires_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AcceptInvitationResponse(BaseModel):
+    message: str = "Invitation accepted"
+    id: UUID
+    workspace_id: UUID
+    workspace_name: str
+    role: str
+    status: str
+
+
+class DeclineInvitationResponse(BaseModel):
+    message: str = "Invitation declined"
+    id: UUID
+    status: str
+
+
+@user_invitations_router.get("", response_model=list[UserInvitationRead])
+def list_user_invitations(
+    principal: Principal = Depends(get_user_principal),
+    db: Session = Depends(get_db),
+):
+    if not principal.user_id or not principal.email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+
+    user_email = principal.email.strip().lower()
+    now = datetime.now(timezone.utc)
+    invitations = db.execute(
+        select(Invitation)
+        .where(
+            func.lower(func.trim(Invitation.email)) == user_email,
+            Invitation.status == "pending",
+            Invitation.expires_at > now,
+        )
+        .order_by(Invitation.created_at.desc())
+    ).scalars().all()
+
+    result: list[UserInvitationRead] = []
+    for inv in invitations:
+        ws = db.get(Workspace, inv.workspace_id)
+        inviter = db.get(User, inv.invited_by)
+        result.append(
+            UserInvitationRead(
+                id=inv.id,
+                workspace_id=inv.workspace_id,
+                workspace_name=ws.name if ws else "Workspace",
+                role=inv.role,
+                status=inv.status,
+                invited_by_email=inviter.email if inviter else None,
+                created_at=inv.created_at,
+                expires_at=inv.expires_at,
+            )
+        )
+    return result
+
+
+@user_invitations_router.post("/{id}/accept", response_model=AcceptInvitationResponse)
+def accept_user_invitation(
+    id: UUID,
+    principal: Principal = Depends(get_user_principal),
+    db: Session = Depends(get_db),
+):
+    if not principal.user_id or not principal.email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+
+    invitation = db.get(Invitation, id)
+    if not invitation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invitation not found",
+        )
+
+    if invitation.email.strip().lower() != principal.email.strip().lower():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invitation does not belong to the current user",
+        )
+
+    now = datetime.now(timezone.utc)
+    if invitation.status == "expired" or (invitation.status == "pending" and invitation.expires_at <= now):
+        invitation.status = "expired"
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invitation has expired",
+        )
+
+    if invitation.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invitation is no longer pending or has already been used",
+        )
+
+    existing_mem = db.get(Membership, (principal.user_id, invitation.workspace_id))
+    if existing_mem:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Already a member of this workspace",
+        )
+
+    # Create membership with specified role and mark invitation as accepted
+    mem = Membership(
+        user_id=principal.user_id,
+        workspace_id=invitation.workspace_id,
+        role=invitation.role,
+    )
+    db.add(mem)
+    invitation.status = "accepted"
+    invitation.accepted_at = now
+    db.commit()
+    db.refresh(mem)
+
+    ws = db.get(Workspace, invitation.workspace_id)
+    return AcceptInvitationResponse(
+        message="Invitation accepted",
+        id=invitation.id,
+        workspace_id=invitation.workspace_id,
+        workspace_name=ws.name if ws else "Workspace",
+        role=invitation.role,
+        status="accepted",
+    )
+
+
+@user_invitations_router.post("/{id}/decline", response_model=DeclineInvitationResponse)
+def decline_user_invitation(
+    id: UUID,
+    principal: Principal = Depends(get_user_principal),
+    db: Session = Depends(get_db),
+):
+    if not principal.user_id or not principal.email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+
+    invitation = db.get(Invitation, id)
+    if not invitation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invitation not found",
+        )
+
+    if invitation.email.strip().lower() != principal.email.strip().lower():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invitation does not belong to the current user",
+        )
+
+    now = datetime.now(timezone.utc)
+    if invitation.status == "expired" or (invitation.status == "pending" and invitation.expires_at <= now):
+        invitation.status = "expired"
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invitation has expired",
+        )
+
+    if invitation.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invitation is no longer pending or has already been used",
+        )
+
+    invitation.status = "declined"
+    db.commit()
+
+    return DeclineInvitationResponse(
+        message="Invitation declined",
+        id=invitation.id,
+        status="declined",
+    )

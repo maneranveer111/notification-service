@@ -5,44 +5,40 @@ import { usePolling } from '../../lib/usePolling';
 import { useAuth } from '../../lib/auth';
 import ErrorBanner from '../../components/ErrorBanner';
 import Loading from '../../components/Loading';
+import Button from '../../components/ui/Button';
+import Input from '../../components/ui/Input';
+import Card from '../../components/ui/Card';
+import Badge from '../../components/ui/Badge';
 
-function planColor(plan) {
-  if (plan === 'pro') return 'bg-blue-700 text-blue-100';
-  if (plan === 'unlimited') return 'bg-purple-700 text-purple-100';
-  return 'bg-gray-700 text-gray-300';
-}
-
-function UsageBar({ label, used, limit, resetsAt }) {
-  const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
-  const barColor =
-    limit === null ? 'bg-green-500' :
-    pct >= 100 ? 'bg-red-500' :
-    pct >= 80 ? 'bg-amber-500' : 'bg-green-500';
+function UsageRow({ label, used = 0, limit = null, resetsAt }) {
+  const isUnlimited = limit === null;
+  const pct = isUnlimited ? 0 : Math.min(100, Math.round((used / limit) * 100));
 
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between text-sm">
-        <span className="text-gray-300 font-medium">{label}</span>
-        <span className="text-gray-400">
-          {limit === null ? (
-            <span className="text-green-400 font-medium">Unlimited</span>
+    <div className="space-y-1.5 py-3 first:pt-0 last:pb-0">
+      <div className="flex items-center justify-between text-xs">
+        <span className="font-medium text-[#1C1917]">{label}</span>
+        <span className="text-[#78716C]">
+          <strong className="text-[#1C1917]">{used.toLocaleString()}</strong>{' '}
+          {isUnlimited ? (
+            <span className="text-[#15803D] font-medium">(Unlimited)</span>
           ) : (
-            <span className={pct >= 100 ? 'text-red-400 font-medium' : pct >= 80 ? 'text-amber-400 font-medium' : 'text-gray-400'}>
-              {used} / {limit}
-            </span>
+            `of ${limit.toLocaleString()}`
           )}
         </span>
       </div>
-      <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
-        {limit !== null && (
+      {!isUnlimited && (
+        <div className="h-1.5 w-full bg-[#F5F5F4] rounded-full overflow-hidden">
           <div
-            className={`h-2 rounded-full transition-all ${barColor}`}
+            className={`h-full rounded-full transition-all ${
+              pct >= 100 ? 'bg-[#B91C1C]' : pct >= 80 ? 'bg-[#A16207]' : 'bg-[#4F46E5]'
+            }`}
             style={{ width: `${pct}%` }}
           />
-        )}
-      </div>
+        </div>
+      )}
       {resetsAt && (
-        <p className="text-xs text-gray-500">
+        <p className="text-[11px] text-[#A8A29E]">
           Resets {new Date(resetsAt).toLocaleString()}
         </p>
       )}
@@ -66,13 +62,24 @@ export default function GeneralPage() {
   const inputRef = useRef(null);
 
   const usageFetch = useCallback(() => apiFetch('/usage'), []);
-  const { data: usage, error: usageError, loading: usageLoading } = usePolling(usageFetch, { intervalMs: 30000 });
+  const {
+    data: usage,
+    error: usageError,
+    loading: usageLoading,
+  } = usePolling(usageFetch, { intervalMs: 30000 });
 
   useEffect(() => {
     setWsLoading(true);
     apiFetch('/workspaces/current')
-      .then((d) => { setWorkspace(d); setWsLoading(false); })
-      .catch((e) => { setWsError(e); setWsLoading(false); });
+      .then((d) => {
+        setWorkspace(d);
+        setNameInput(d.name || '');
+        setWsLoading(false);
+      })
+      .catch((e) => {
+        setWsError(e);
+        setWsLoading(false);
+      });
   }, []);
 
   useEffect(() => {
@@ -111,118 +118,142 @@ export default function GeneralPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6">
       {flash && (
-        <div className="px-4 py-3 rounded-lg bg-amber-900/30 border border-amber-700 text-amber-300 text-sm">
-          ⚠ {flash}
+        <div className="px-3.5 py-2.5 rounded-[6px] bg-[#FEFCE8] border border-[#FEF08A] text-[#A16207] text-xs">
+          {flash}
         </div>
       )}
 
-      {/* Workspace name */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
-        <h2 className="text-base font-semibold text-white">Workspace</h2>
-
+      {/* Workspace Profile Card */}
+      <Card
+        title="Workspace Profile"
+        subtitle="General details and identification for this workspace."
+      >
         {wsLoading ? (
           <Loading text="Loading workspace…" />
         ) : wsError ? (
           <ErrorBanner error={wsError} />
         ) : editing ? (
-          <form onSubmit={saveName} className="space-y-3">
-            <div>
-              <label htmlFor="ws-name-input" className="block text-sm font-medium text-gray-300 mb-1">
-                Workspace name
-              </label>
-              <input
-                id="ws-name-input"
-                ref={inputRef}
-                type="text"
-                required
-                value={nameInput}
-                onChange={(e) => setNameInput(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
-              />
-            </div>
-            {saveError && <p className="text-sm text-red-400">{saveError}</p>}
+          <form onSubmit={saveName} className="space-y-4 max-w-md">
+            <Input
+              id="ws-name-input"
+              ref={inputRef}
+              label="Workspace Name"
+              type="text"
+              required
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              placeholder="e.g. Acme Corp"
+              error={saveError}
+            />
             <div className="flex gap-2">
-              <button
+              <Button
                 type="submit"
-                disabled={saveLoading || !nameInput.trim()}
-                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium transition-colors"
+                variant="primary"
+                size="sm"
+                loading={saveLoading}
+                disabled={!nameInput.trim()}
               >
-                {saveLoading ? 'Saving…' : 'Save'}
-              </button>
-              <button
+                Save Changes
+              </Button>
+              <Button
                 type="button"
+                variant="secondary"
+                size="sm"
                 onClick={cancelEdit}
                 disabled={saveLoading}
-                className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium transition-colors"
               >
                 Cancel
-              </button>
+              </Button>
             </div>
           </form>
         ) : (
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-white text-sm font-medium">{workspace?.name}</p>
-            {isAdmin && (
-              <button
-                type="button"
-                onClick={startEdit}
-                className="px-3 py-1.5 text-xs rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
-              >
-                Edit
-              </button>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between py-2 border-b border-[#E7E5E4]">
+              <div>
+                <p className="text-xs text-[#78716C]">Workspace Name</p>
+                <p className="text-sm font-semibold text-[#1C1917] mt-0.5">
+                  {workspace?.name}
+                </p>
+              </div>
+              {isAdmin && (
+                <Button variant="secondary" size="sm" onClick={startEdit}>
+                  Edit
+                </Button>
+              )}
+            </div>
+
+            {workspace?.slug && (
+              <div className="flex items-center justify-between py-2">
+                <div>
+                  <p className="text-xs text-[#78716C]">Workspace Slug</p>
+                  <p className="text-xs font-mono text-[#1C1917] mt-0.5">
+                    {workspace.slug}
+                  </p>
+                </div>
+              </div>
             )}
           </div>
         )}
-      </div>
+      </Card>
 
-      {/* Usage */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-white">Plan &amp; Usage</h2>
-          {usage?.plan && (
-            <span className={`text-xs px-2.5 py-1 rounded-full font-semibold uppercase tracking-wide ${planColor(usage.plan)}`}>
-              {usage.plan}
-            </span>
-          )}
-        </div>
-
+      {/* Plan & Usage Card */}
+      <Card
+        title="Plan & Usage"
+        subtitle="Resource consumption and limits for this workspace."
+        action={
+          usage?.plan && (
+            <Badge
+              variant={
+                usage.plan === 'unlimited'
+                  ? 'success'
+                  : usage.plan === 'pro'
+                  ? 'accent'
+                  : 'neutral'
+              }
+              size="md"
+            >
+              {usage.plan.toUpperCase()}
+            </Badge>
+          )
+        }
+      >
         {usageLoading && !usage ? (
           <Loading text="Loading usage…" />
         ) : usageError ? (
           <ErrorBanner error={usageError} />
         ) : usage ? (
-          <div className="space-y-5">
-            <UsageBar
+          <div className="divide-y divide-[#E7E5E4]">
+            <UsageRow
               label="Daily Sends"
               used={usage.daily?.used ?? 0}
               limit={usage.daily?.limit ?? null}
               resetsAt={usage.daily?.resets_at}
             />
-            <UsageBar
+            <UsageRow
               label="Monthly Sends"
               used={usage.monthly?.used ?? 0}
               limit={usage.monthly?.limit ?? null}
               resetsAt={usage.monthly?.resets_at}
             />
-            <UsageBar
+            <UsageRow
               label="API Keys"
               used={usage.api_keys?.used ?? 0}
               limit={usage.api_keys?.limit ?? null}
             />
-            <UsageBar
-              label="Members"
+            <UsageRow
+              label="Team Members"
               used={usage.members?.used ?? 0}
               limit={usage.members?.limit ?? null}
             />
           </div>
         ) : null}
 
-        <p className="text-xs text-gray-500 pt-1">
-          Plans and limits are set by the service operator.
+        <p className="text-[11px] text-[#A8A29E] mt-4 pt-3 border-t border-[#E7E5E4]">
+          Plans and quotas are managed by your service operator.
         </p>
-      </div>
+      </Card>
     </div>
   );
 }

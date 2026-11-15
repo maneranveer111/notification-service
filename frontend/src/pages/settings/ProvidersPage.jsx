@@ -1,27 +1,49 @@
 import { useState, useEffect, useCallback } from 'react';
+import {
+  Mail,
+  Server,
+  MessageSquare,
+  Copy,
+  Check,
+  RefreshCw,
+  Info,
+  CheckCircle2,
+  AlertCircle,
+  X,
+  Send,
+  Plug,
+} from 'lucide-react';
 import { apiFetch } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import ErrorBanner from '../../components/ErrorBanner';
 import Loading from '../../components/Loading';
-import EmptyState from '../../components/EmptyState';
 import PasswordInput from '../../components/PasswordInput';
+import Button from '../../components/ui/Button';
+import Card from '../../components/ui/Card';
+import Badge from '../../components/ui/Badge';
+import Input from '../../components/ui/Input';
+import Select from '../../components/ui/Select';
+import Switch from '../../components/ui/Switch';
 
 const PROVIDER_META = {
   brevo: {
     label: 'Brevo Email',
-    icon: '📧',
+    icon: Mail,
+    desc: 'Email delivery via Brevo v3 REST API',
     help: 'Create an API key in your Brevo account and verify your sender address or domain before connecting.',
   },
   smtp: {
     label: 'SMTP Email',
-    icon: '📨',
+    icon: Server,
+    desc: 'Direct standard SMTP / STARTTLS socket',
     help: 'For Gmail, use an App Password (not your account password). The host must be a publicly accessible SMTP server.',
   },
   twilio: {
     label: 'Twilio SMS',
-    icon: '📱',
-    help: 'Trial accounts can only message verified numbers. In India, commercial SMS requires sender and template registration with your carrier and Twilio, handled in your own Twilio account.',
+    icon: MessageSquare,
+    desc: 'Programmable Messaging & Shortcodes',
+    help: 'Trial accounts can only message verified numbers. In India, commercial SMS requires sender and template registration.',
   },
 };
 
@@ -35,125 +57,146 @@ function isValidE164(v) {
   return /^\+[1-9]\d{6,14}$/.test(v);
 }
 
-// Dark-styled PasswordInput wrapper
-function DarkPasswordInput({ id, label, ...rest }) {
-  const [show, setShow] = useState(false);
-  return (
-    <div className="space-y-1">
-      {label && (
-        <label htmlFor={id} className="block text-sm font-medium text-gray-300">
-          {label}
-        </label>
-      )}
-      <div className="relative">
-        <input
-          id={id}
-          type={show ? 'text' : 'password'}
-          className="block w-full rounded-lg bg-gray-800 border border-gray-700 text-white px-3 py-2 pr-10 text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
-          {...rest}
-        />
-        <button
-          type="button"
-          onClick={() => setShow((s) => !s)}
-          className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-200"
-          aria-label={show ? 'Hide' : 'Show'}
-        >
-          {show ? '🙈' : '👁'}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function ProviderCard({ providerKey, info, isAdmin, is503, onEdit, onTest, onDisconnect }) {
+function ProviderCard({
+  providerKey,
+  info,
+  isAdmin,
+  is503,
+  onEdit,
+  onTest,
+  onDisconnect,
+}) {
   const meta = PROVIDER_META[providerKey];
+  const Icon = meta.icon;
   const connected = info?.is_active;
   const fields = info?.fields || {};
   const hints = info?.hints || {};
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span className="text-lg">{meta.icon}</span>
-          <h3 className="font-semibold text-white">{meta.label}</h3>
+    <div className="bg-white border border-[#E7E5E4] rounded-[8px] p-5 flex flex-col justify-between shadow-xs">
+      <div className="space-y-3">
+        {/* Header */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="w-8 h-8 rounded-[6px] bg-[#F5F5F4] border border-[#E7E5E4] flex items-center justify-center text-[#1C1917]">
+            <Icon className="w-4 h-4" strokeWidth={1.5} />
+          </div>
+          <Badge
+            variant={connected ? 'success' : 'neutral'}
+            dot
+            size="sm"
+          >
+            {connected ? 'Connected' : 'Not connected'}
+          </Badge>
         </div>
-        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-          connected
-            ? 'bg-green-800 text-green-200'
-            : 'bg-gray-700 text-gray-400'
-        }`}>
-          {connected ? 'Connected' : 'Not connected'}
-        </span>
+
+        <div>
+          <h3 className="font-semibold text-sm text-[#1C1917]">{meta.label}</h3>
+          <p className="text-xs text-[#78716C] mt-0.5">{meta.desc}</p>
+        </div>
+
+        {/* Connected details */}
+        {connected && (
+          <div className="text-xs text-[#78716C] space-y-1 pt-2 border-t border-[#E7E5E4]">
+            {providerKey === 'brevo' && (
+              <>
+                {fields.from_email && (
+                  <p className="truncate">
+                    <span className="text-[#1C1917] font-medium">From:</span>{' '}
+                    {fields.from_email}
+                    {fields.from_name ? ` (${fields.from_name})` : ''}
+                  </p>
+                )}
+                {hints.api_key && (
+                  <p className="font-mono text-[11px]">
+                    Key: ••••{hints.api_key}
+                  </p>
+                )}
+              </>
+            )}
+            {providerKey === 'smtp' && (
+              <>
+                {fields.host && (
+                  <p className="truncate">
+                    <span className="text-[#1C1917] font-medium">Host:</span>{' '}
+                    {fields.host}:{fields.port ?? ''}
+                  </p>
+                )}
+                {fields.from_email && (
+                  <p className="truncate">
+                    <span className="text-[#1C1917] font-medium">From:</span>{' '}
+                    {fields.from_email}
+                  </p>
+                )}
+              </>
+            )}
+            {providerKey === 'twilio' && (
+              <>
+                {fields.from_number && (
+                  <p>
+                    <span className="text-[#1C1917] font-medium">From:</span>{' '}
+                    {fields.from_number}
+                  </p>
+                )}
+                {hints.account_sid && (
+                  <p className="font-mono text-[11px]">
+                    SID: ••••{hints.account_sid}
+                  </p>
+                )}
+              </>
+            )}
+
+            <div className="pt-1">
+              {info.last_verified_at ? (
+                <span className="inline-flex items-center gap-1 text-[11px] text-[#15803D]">
+                  <CheckCircle2 className="w-3.5 h-3.5" strokeWidth={1.5} />
+                  Verified
+                </span>
+              ) : info.last_error ? (
+                <span className="inline-flex items-center gap-1 text-[11px] text-[#B91C1C]">
+                  <AlertCircle className="w-3.5 h-3.5" strokeWidth={1.5} />
+                  Error in last test
+                </span>
+              ) : (
+                <span className="text-[11px] text-[#A8A29E]">Not yet tested</span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Non-secret fields */}
-      {connected && (
-        <div className="text-sm text-gray-400 space-y-1">
-          {providerKey === 'brevo' && (
-            <>
-              {fields.from_email && <p>From: {fields.from_email}{fields.from_name ? ` (${fields.from_name})` : ''}</p>}
-              {hints.api_key && <p>API key: ****{hints.api_key}</p>}
-            </>
-          )}
-          {providerKey === 'smtp' && (
-            <>
-              {fields.host && <p>Host: {fields.host}:{fields.port ?? ''}</p>}
-              {fields.from_email && <p>From: {fields.from_email}</p>}
-              {fields.use_tls !== undefined && <p>TLS: {fields.use_tls ? 'Yes' : 'No'}</p>}
-            </>
-          )}
-          {providerKey === 'twilio' && (
-            <>
-              {fields.from_number && <p>From: {fields.from_number}</p>}
-              {hints.account_sid && <p>Account SID: ****{hints.account_sid}</p>}
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Last verified / last error */}
-      {connected && (
-        <div className="text-xs">
-          {info.last_verified_at ? (
-            <p className="text-green-400">✓ Verified {new Date(info.last_verified_at).toLocaleString()}</p>
-          ) : info.last_error ? (
-            <p className="text-red-400">✗ Error: {info.last_error}</p>
-          ) : (
-            <p className="text-gray-500">Not yet tested</p>
-          )}
-        </div>
-      )}
-
-      {/* Actions */}
+      {/* Action Buttons */}
       {isAdmin && (
-        <div className="flex flex-wrap gap-2 pt-1">
-          <button
-            type="button"
+        <div className="flex flex-wrap items-center gap-2 pt-4 mt-2 border-t border-[#E7E5E4] min-w-0">
+          <Button
+            variant={connected ? 'secondary' : 'secondary'}
+            size="sm"
+            className="flex-1 min-w-0"
             onClick={() => onEdit(providerKey)}
             disabled={is503}
-            className="px-3 py-1.5 text-xs rounded-lg bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white font-medium transition-colors"
+            icon={Plug}
           >
-            {connected ? 'Edit' : 'Connect'}
-          </button>
+            {connected ? 'Configure' : 'Connect'}
+          </Button>
           {connected && (
             <>
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                size="sm"
+                className="shrink-0"
                 onClick={() => onTest(providerKey)}
                 disabled={is503}
-                className="px-3 py-1.5 text-xs rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-gray-200 font-medium transition-colors"
               >
                 Test
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="shrink-0"
                 onClick={() => onDisconnect(providerKey)}
                 disabled={is503}
-                className="px-3 py-1.5 text-xs rounded-lg bg-red-800 hover:bg-red-700 disabled:opacity-50 text-red-200 font-medium transition-colors"
               >
                 Disconnect
-              </button>
+              </Button>
             </>
           )}
         </div>
@@ -178,7 +221,9 @@ function EditModal({ providerKey, info, onClose, onSaved, is503 }) {
   const [username, setUsername] = useState(fields.username || '');
   const [password, setPassword] = useState('');
   const [smtpFromEmail, setSmtpFromEmail] = useState(fields.from_email || '');
-  const [useTls, setUseTls] = useState(fields.use_tls !== undefined ? fields.use_tls : true);
+  const [useTls, setUseTls] = useState(
+    fields.use_tls !== undefined ? fields.use_tls : true
+  );
 
   // Twilio
   const [accountSid, setAccountSid] = useState('');
@@ -190,7 +235,7 @@ function EditModal({ providerKey, info, onClose, onSaved, is503 }) {
   const [loading, setLoading] = useState(false);
 
   const meta = PROVIDER_META[providerKey];
-  const secretPlaceholder = 'A value is saved. Leave blank to keep it.';
+  const secretPlaceholder = 'Saved. Leave blank to keep existing.';
 
   function validate() {
     const e = {};
@@ -202,13 +247,15 @@ function EditModal({ providerKey, info, onClose, onSaved, is503 }) {
     if (providerKey === 'smtp') {
       if (!isEditing && !host) e.host = 'Host is required.';
       if (!smtpFromEmail) e.smtpFromEmail = 'From email is required.';
-      else if (!isValidEmail(smtpFromEmail)) e.smtpFromEmail = 'Must be a valid email.';
+      else if (!isValidEmail(smtpFromEmail))
+        e.smtpFromEmail = 'Must be a valid email.';
     }
     if (providerKey === 'twilio') {
       if (!isEditing && !accountSid) e.accountSid = 'Account SID is required.';
       if (!isEditing && !authToken) e.authToken = 'Auth token is required.';
       if (!fromNumber) e.fromNumber = 'From number is required.';
-      else if (!isValidE164(fromNumber)) e.fromNumber = 'Must be E.164 format (e.g. +12125550100).';
+      else if (!isValidE164(fromNumber))
+        e.fromNumber = 'Must be in E.164 format (e.g. +12125550100).';
     }
     return e;
   }
@@ -216,7 +263,10 @@ function EditModal({ providerKey, info, onClose, onSaved, is503 }) {
   async function handleSubmit(e) {
     e.preventDefault();
     const errs = validate();
-    if (Object.keys(errs).length > 0) { setErrors(errs); return; }
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs);
+      return;
+    }
     setErrors({});
     setServerError(null);
     setLoading(true);
@@ -247,7 +297,9 @@ function EditModal({ providerKey, info, onClose, onSaved, is503 }) {
       onSaved();
     } catch (err) {
       if (err.status === 503) {
-        setServerError('This server has no encryption key configured. Ask the operator to set ENCRYPTION_KEY.');
+        setServerError(
+          'This server has no encryption key configured. Ask the operator to set ENCRYPTION_KEY.'
+        );
       } else if (err.status === 422 && Array.isArray(err.detail)) {
         const fieldErrs = {};
         err.detail.forEach((d) => {
@@ -264,31 +316,30 @@ function EditModal({ providerKey, info, onClose, onSaved, is503 }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-md shadow-2xl overflow-y-auto max-h-[90vh]">
-        <div className="p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-white">
-              {isEditing ? 'Edit' : 'Connect'} {meta.label}
-            </h2>
-            <button
-              type="button"
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-200 text-xl leading-none"
-              aria-label="Close"
-            >
-              ×
-            </button>
-          </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white border border-[#E7E5E4] rounded-[12px] w-full max-w-md shadow-xl overflow-hidden max-h-[90vh] flex flex-col">
+        <div className="p-5 border-b border-[#E7E5E4] flex items-center justify-between">
+          <h2 className="text-base font-semibold text-[#1C1917]">
+            {isEditing ? 'Configure' : 'Connect'} {meta.label}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 rounded text-[#78716C] hover:text-[#1C1917] transition-colors"
+          >
+            <X className="w-4 h-4" strokeWidth={1.5} />
+          </button>
+        </div>
 
+        <div className="p-5 overflow-y-auto space-y-4">
           {is503 && (
-            <div className="px-4 py-3 rounded-lg bg-yellow-900/40 border border-yellow-700 text-yellow-300 text-sm">
+            <div className="px-3.5 py-2.5 rounded-[6px] bg-[#FEFCE8] border border-[#FEF08A] text-[#A16207] text-xs">
               This server has no encryption key configured. Ask the operator to set ENCRYPTION_KEY.
             </div>
           )}
 
           {serverError && (
-            <div className="px-4 py-3 rounded-lg bg-red-900/30 border border-red-700 text-red-300 text-sm">
+            <div className="px-3.5 py-2.5 rounded-[6px] bg-[#FEF2F2] border border-[#FECACA] text-[#B91C1C] text-xs">
               {serverError}
             </div>
           )}
@@ -296,192 +347,168 @@ function EditModal({ providerKey, info, onClose, onSaved, is503 }) {
           <form onSubmit={handleSubmit} className="space-y-4">
             {providerKey === 'brevo' && (
               <>
-                <div>
-                  <DarkPasswordInput
-                    id="brevo-api-key"
-                    label={`API Key${isEditing ? '' : ' *'}`}
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder={isEditing && secrets.includes('api_key') ? secretPlaceholder : 'Brevo API key'}
-                    autoComplete="off"
-                  />
-                  {errors.apiKey && <p className="text-xs text-red-400 mt-1">{errors.apiKey}</p>}
-                </div>
-                <div>
-                  <label htmlFor="brevo-from-email" className="block text-sm font-medium text-gray-300 mb-1">
-                    From Email *
-                  </label>
-                  <input
-                    id="brevo-from-email"
-                    type="email"
-                    value={fromEmail}
-                    onChange={(e) => setFromEmail(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
-                    placeholder="sender@example.com"
-                  />
-                  {errors.fromEmail && <p className="text-xs text-red-400 mt-1">{errors.fromEmail}</p>}
-                </div>
-                <div>
-                  <label htmlFor="brevo-from-name" className="block text-sm font-medium text-gray-300 mb-1">
-                    From Name (optional)
-                  </label>
-                  <input
-                    id="brevo-from-name"
-                    type="text"
-                    value={fromName}
-                    onChange={(e) => setFromName(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
-                    placeholder="Sender Name"
-                  />
-                </div>
+                <PasswordInput
+                  id="brevo-api-key"
+                  label={`API Key${isEditing ? '' : ' *'}`}
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder={
+                    isEditing && secrets.includes('api_key')
+                      ? secretPlaceholder
+                      : 'xkeysib-...'
+                  }
+                  error={errors.apiKey}
+                  autoComplete="off"
+                />
+                <Input
+                  id="brevo-from-email"
+                  label="From Email *"
+                  type="email"
+                  value={fromEmail}
+                  onChange={(e) => setFromEmail(e.target.value)}
+                  placeholder="sender@yourdomain.com"
+                  error={errors.fromEmail}
+                />
+                <Input
+                  id="brevo-from-name"
+                  label="From Name (optional)"
+                  type="text"
+                  value={fromName}
+                  onChange={(e) => setFromName(e.target.value)}
+                  placeholder="Notification Service"
+                />
               </>
             )}
 
             {providerKey === 'smtp' && (
               <>
-                <div>
-                  <label htmlFor="smtp-host" className="block text-sm font-medium text-gray-300 mb-1">
-                    Host *
-                  </label>
-                  <input
-                    id="smtp-host"
-                    type="text"
-                    value={host}
-                    onChange={(e) => setHost(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
-                    placeholder="smtp.example.com"
-                  />
-                  {errors.host && <p className="text-xs text-red-400 mt-1">{errors.host}</p>}
-                </div>
-                <div>
-                  <label htmlFor="smtp-port" className="block text-sm font-medium text-gray-300 mb-1">
-                    Port *
-                  </label>
-                  <select
-                    id="smtp-port"
-                    value={port}
-                    onChange={(e) => setPort(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white focus:outline-none focus:border-blue-500 text-sm"
-                  >
-                    {PORT_OPTIONS.map((p) => (
-                      <option key={p} value={p}>{p}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="smtp-username" className="block text-sm font-medium text-gray-300 mb-1">
-                    Username
-                  </label>
-                  <input
-                    id="smtp-username"
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
-                    autoComplete="username"
-                  />
-                </div>
-                <div>
-                  <DarkPasswordInput
-                    id="smtp-password"
-                    label="Password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder={isEditing && secrets.includes('password') ? secretPlaceholder : ''}
-                    autoComplete="new-password"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="smtp-from-email" className="block text-sm font-medium text-gray-300 mb-1">
-                    From Email *
-                  </label>
-                  <input
-                    id="smtp-from-email"
-                    type="email"
-                    value={smtpFromEmail}
-                    onChange={(e) => setSmtpFromEmail(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
-                    placeholder="sender@example.com"
-                  />
-                  {errors.smtpFromEmail && <p className="text-xs text-red-400 mt-1">{errors.smtpFromEmail}</p>}
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
+                <Input
+                  id="smtp-host"
+                  label="Host *"
+                  type="text"
+                  value={host}
+                  onChange={(e) => setHost(e.target.value)}
+                  placeholder="smtp.example.com"
+                  error={errors.host}
+                />
+                <Select
+                  id="smtp-port"
+                  label="Port *"
+                  value={port}
+                  onChange={(e) => setPort(e.target.value)}
+                >
+                  {PORT_OPTIONS.map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </Select>
+                <Input
+                  id="smtp-username"
+                  label="Username"
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="smtp-user"
+                  autoComplete="username"
+                />
+                <PasswordInput
+                  id="smtp-password"
+                  label="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={
+                    isEditing && secrets.includes('password')
+                      ? secretPlaceholder
+                      : ''
+                  }
+                  autoComplete="new-password"
+                />
+                <Input
+                  id="smtp-from-email"
+                  label="From Email *"
+                  type="email"
+                  value={smtpFromEmail}
+                  onChange={(e) => setSmtpFromEmail(e.target.value)}
+                  placeholder="notifications@yourdomain.com"
+                  error={errors.smtpFromEmail}
+                />
+                <div className="pt-1">
+                  <Switch
                     id="smtp-tls"
-                    type="checkbox"
+                    label="Use TLS / STARTTLS"
                     checked={useTls}
-                    onChange={(e) => setUseTls(e.target.checked)}
-                    className="rounded border-gray-600 bg-gray-800 text-blue-500"
+                    onChange={setUseTls}
                   />
-                  <label htmlFor="smtp-tls" className="text-sm text-gray-300">Use TLS</label>
                 </div>
               </>
             )}
 
             {providerKey === 'twilio' && (
               <>
-                <div>
-                  <label htmlFor="twilio-sid" className="block text-sm font-medium text-gray-300 mb-1">
-                    Account SID{!isEditing ? ' *' : ''}
-                  </label>
-                  <input
-                    id="twilio-sid"
-                    type="text"
-                    value={accountSid}
-                    onChange={(e) => setAccountSid(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
-                    placeholder={isEditing && secrets.includes('account_sid') ? secretPlaceholder : 'ACxxxxxxxx...'}
-                    autoComplete="off"
-                  />
-                  {errors.accountSid && <p className="text-xs text-red-400 mt-1">{errors.accountSid}</p>}
-                </div>
-                <div>
-                  <DarkPasswordInput
-                    id="twilio-auth-token"
-                    label={`Auth Token${!isEditing ? ' *' : ''}`}
-                    value={authToken}
-                    onChange={(e) => setAuthToken(e.target.value)}
-                    placeholder={isEditing && secrets.includes('auth_token') ? secretPlaceholder : ''}
-                    autoComplete="off"
-                  />
-                  {errors.authToken && <p className="text-xs text-red-400 mt-1">{errors.authToken}</p>}
-                </div>
-                <div>
-                  <label htmlFor="twilio-from-number" className="block text-sm font-medium text-gray-300 mb-1">
-                    From Number * (E.164 format)
-                  </label>
-                  <input
-                    id="twilio-from-number"
-                    type="tel"
-                    value={fromNumber}
-                    onChange={(e) => setFromNumber(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
-                    placeholder="+12125550100"
-                  />
-                  {errors.fromNumber && <p className="text-xs text-red-400 mt-1">{errors.fromNumber}</p>}
-                </div>
+                <Input
+                  id="twilio-sid"
+                  label={`Account SID${!isEditing ? ' *' : ''}`}
+                  type="text"
+                  value={accountSid}
+                  onChange={(e) => setAccountSid(e.target.value)}
+                  placeholder={
+                    isEditing && secrets.includes('account_sid')
+                      ? secretPlaceholder
+                      : 'ACxxxxxxxx...'
+                  }
+                  error={errors.accountSid}
+                  autoComplete="off"
+                />
+                <PasswordInput
+                  id="twilio-auth-token"
+                  label={`Auth Token${!isEditing ? ' *' : ''}`}
+                  value={authToken}
+                  onChange={(e) => setAuthToken(e.target.value)}
+                  placeholder={
+                    isEditing && secrets.includes('auth_token')
+                      ? secretPlaceholder
+                      : ''
+                  }
+                  error={errors.authToken}
+                  autoComplete="off"
+                />
+                <Input
+                  id="twilio-from-number"
+                  label="From Number * (E.164)"
+                  type="tel"
+                  value={fromNumber}
+                  onChange={(e) => setFromNumber(e.target.value)}
+                  placeholder="+18166843869"
+                  error={errors.fromNumber}
+                />
               </>
             )}
 
-            {/* Help text */}
-            <p className="text-xs text-gray-500 border-t border-gray-800 pt-3">{meta.help}</p>
+            <p className="text-[11px] text-[#78716C] pt-2 border-t border-[#E7E5E4]">
+              {meta.help}
+            </p>
 
-            <div className="flex gap-3 pt-1">
-              <button
-                type="button"
+            <div className="flex gap-2.5 pt-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                className="flex-1"
                 onClick={onClose}
                 disabled={loading}
-                className="flex-1 px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-gray-300 text-sm font-medium"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="submit"
-                disabled={loading || is503}
-                className="flex-1 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium"
+                variant="primary"
+                size="sm"
+                className="flex-1"
+                loading={loading}
+                disabled={is503}
               >
-                {loading ? 'Saving…' : 'Save'}
-              </button>
+                Save Provider
+              </Button>
             </div>
           </form>
         </div>
@@ -508,7 +535,10 @@ function TestModal({ providerKey, onClose, onTested }) {
       });
       setResult({ ok: res.ok, error: res.error });
     } catch (err) {
-      setResult({ ok: false, error: err?.detail || err?.message || 'Test failed.' });
+      setResult({
+        ok: false,
+        error: err?.detail || err?.message || 'Test failed.',
+      });
     } finally {
       setLoading(false);
     }
@@ -520,53 +550,76 @@ function TestModal({ providerKey, onClose, onTested }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-sm shadow-2xl p-6 space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white border border-[#E7E5E4] rounded-[12px] w-full max-w-sm shadow-xl p-5 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">Test {meta.label}</h2>
-          <button type="button" onClick={handleClose} className="text-gray-400 hover:text-gray-200 text-xl" aria-label="Close">×</button>
+          <h2 className="text-base font-semibold text-[#1C1917]">
+            Test {meta.label}
+          </h2>
+          <button
+            type="button"
+            onClick={handleClose}
+            className="p-1 rounded text-[#78716C] hover:text-[#1C1917]"
+          >
+            <X className="w-4 h-4" strokeWidth={1.5} />
+          </button>
         </div>
 
         {result ? (
-          <div className={`px-4 py-3 rounded-lg border text-sm ${
-            result.ok
-              ? 'bg-green-900/30 border-green-700 text-green-300'
-              : 'bg-red-900/30 border-red-700 text-red-300'
-          }`}>
-            {result.ok ? '✓ Test sent successfully.' : `✗ ${result.error || 'Test failed.'}`}
+          <div
+            className={`px-3.5 py-2.5 rounded-[6px] border text-xs ${
+              result.ok
+                ? 'bg-[#F0FDF4] border-[#BBF7D0] text-[#15803D]'
+                : 'bg-[#FEF2F2] border-[#FECACA] text-[#B91C1C]'
+            }`}
+          >
+            {result.ok ? '✓ Test dispatched successfully.' : `✗ ${result.error || 'Test failed.'}`}
           </div>
         ) : (
           <form onSubmit={handleTest} className="space-y-4">
-            <div>
-              <label htmlFor="test-to" className="block text-sm font-medium text-gray-300 mb-1">
-                {isEmail ? 'Recipient email *' : 'Recipient phone (E.164) *'}
-              </label>
-              <input
-                id="test-to"
-                type={isEmail ? 'email' : 'tel'}
-                required
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
-                placeholder={isEmail ? 'test@example.com' : '+12125550100'}
-                autoFocus
-              />
-            </div>
-            <div className="flex gap-3">
-              <button type="button" onClick={handleClose} className="flex-1 px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium">
+            <Input
+              id="test-to"
+              label={isEmail ? 'Recipient Email *' : 'Recipient Phone (E.164) *'}
+              type={isEmail ? 'email' : 'tel'}
+              required
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              placeholder={isEmail ? 'test@example.com' : '+18166843869'}
+              autoFocus
+            />
+            <div className="flex gap-2.5 pt-1">
+              <Button
+                variant="secondary"
+                size="sm"
+                className="flex-1"
+                onClick={handleClose}
+              >
                 Cancel
-              </button>
-              <button type="submit" disabled={loading || !to} className="flex-1 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium">
-                {loading ? 'Sending…' : 'Send test'}
-              </button>
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                className="flex-1"
+                loading={loading}
+                disabled={!to}
+                icon={Send}
+              >
+                Send Test
+              </Button>
             </div>
           </form>
         )}
 
         {result && (
-          <button type="button" onClick={handleClose} className="w-full px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium">
+          <Button
+            variant="secondary"
+            size="sm"
+            className="w-full"
+            onClick={handleClose}
+          >
             Close
-          </button>
+          </Button>
         )}
       </div>
     </div>
@@ -594,12 +647,16 @@ function WebhooksPanel({ is503 }) {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   async function handleRegen() {
     setRegenLoading(true);
     try {
-      const d = await apiFetch('/providers/webhooks/regenerate', { method: 'POST' });
+      const d = await apiFetch('/providers/webhooks/regenerate', {
+        method: 'POST',
+      });
       setWebhooks(d);
       setConfirmRegen(false);
     } catch (e) {
@@ -617,82 +674,102 @@ function WebhooksPanel({ is503 }) {
   }
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
-      <h3 className="font-semibold text-white">Delivery Webhooks</h3>
-
+    <Card
+      title="Delivery Webhooks"
+      subtitle="Configure these ingestion endpoints in your provider portals to receive delivery confirmations, spam flags, and bounce receipts."
+    >
       {loading ? (
         <Loading text="Loading webhooks…" />
       ) : error ? (
         <ErrorBanner error={error} onRetry={load} />
       ) : webhooks ? (
         <div className="space-y-4">
-          {/* Brevo */}
+          {/* Brevo Webhook URL */}
           <div className="space-y-1.5">
-            <p className="text-sm font-medium text-gray-300">Brevo Webhook URL</p>
+            <label className="block text-xs font-medium text-[#1C1917]">
+              Brevo Webhook URL
+            </label>
             <div className="flex items-center gap-2">
-              <code className="flex-1 text-xs text-green-300 bg-gray-800 px-3 py-2 rounded-lg truncate">
-                {webhooks.brevo_url}
-              </code>
-              <button
-                type="button"
+              <input
+                type="text"
+                readOnly
+                value={webhooks.brevo_url}
+                className="block w-full bg-[#FAFAF9] border border-[#E7E5E4] rounded-[6px] text-xs font-mono text-[#1C1917] px-3 py-2 select-all focus:outline-none"
+              />
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => copyUrl('brevo', webhooks.brevo_url)}
-                className="shrink-0 px-3 py-1.5 text-xs rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300"
+                icon={copiedField === 'brevo' ? Check : Copy}
               >
-                {copiedField === 'brevo' ? 'Copied!' : 'Copy'}
-              </button>
+                {copiedField === 'brevo' ? 'Copied' : 'Copy'}
+              </Button>
             </div>
-            <p className="text-xs text-gray-500">
-              Paste this URL in Brevo → Transactional → Settings → Webhooks. Enable events: delivered, hard bounce, soft bounce, blocked, invalid email, spam, error.
+            <p className="text-[11px] text-[#78716C]">
+              Paste this URL in Brevo → Transactional → Settings → Webhooks. Enable events: delivered, hard bounce, soft bounce, blocked, spam, error.
             </p>
           </div>
 
-          {/* Twilio */}
+          {/* Twilio Webhook URL */}
           <div className="space-y-1.5">
-            <p className="text-sm font-medium text-gray-300">Twilio Webhook URL</p>
+            <label className="block text-xs font-medium text-[#1C1917]">
+              Twilio Webhook URL
+            </label>
             <div className="flex items-center gap-2">
-              <code className="flex-1 text-xs text-green-300 bg-gray-800 px-3 py-2 rounded-lg truncate">
-                {webhooks.twilio_url}
-              </code>
-              <button
-                type="button"
+              <input
+                type="text"
+                readOnly
+                value={webhooks.twilio_url}
+                className="block w-full bg-[#FAFAF9] border border-[#E7E5E4] rounded-[6px] text-xs font-mono text-[#1C1917] px-3 py-2 select-all focus:outline-none"
+              />
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => copyUrl('twilio', webhooks.twilio_url)}
-                className="shrink-0 px-3 py-1.5 text-xs rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300"
+                icon={copiedField === 'twilio' ? Check : Copy}
               >
-                {copiedField === 'twilio' ? 'Copied!' : 'Copy'}
-              </button>
+                {copiedField === 'twilio' ? 'Copied' : 'Copy'}
+              </Button>
             </div>
-            <p className="text-xs text-gray-500">
-              The Twilio status callback URL is set automatically when a message is sent — nothing to paste.
+            <p className="text-[11px] text-[#78716C]">
+              The Twilio status callback URL is attached automatically when dispatching outbound payloads — manual setup is optional.
             </p>
           </div>
 
           {/* Regenerate */}
-          <div className="pt-2 border-t border-gray-800">
-            <button
-              type="button"
+          <div className="pt-3 border-t border-[#E7E5E4] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium text-[#1C1917]">
+                Rotate Webhook URLs
+              </p>
+              <p className="text-[11px] text-[#78716C]">
+                Regenerating creates brand new webhook secrets. Previous endpoints will immediately stop acknowledging incoming events.
+              </p>
+            </div>
+            <Button
+              variant="destructive"
+              size="sm"
               onClick={() => setConfirmRegen(true)}
               disabled={is503}
-              className="px-3 py-1.5 text-xs rounded-lg bg-amber-700 hover:bg-amber-600 disabled:opacity-50 text-white font-medium transition-colors"
+              icon={RefreshCw}
             >
               Regenerate URLs
-            </button>
-            <p className="text-xs text-gray-500 mt-1">
-              Regenerating creates new URLs immediately. Old URLs stop working instantly.
-            </p>
+            </Button>
           </div>
         </div>
       ) : null}
 
       <ConfirmDialog
         open={confirmRegen}
+        destructive
         title="Regenerate webhook URLs?"
-        message="The old URLs will stop working immediately. You will need to update them in Brevo and any other integrations."
+        message="The previous webhook endpoints will immediately stop acknowledging delivery receipts. You must update your provider settings right away."
         confirmLabel="Regenerate"
         loading={regenLoading}
         onConfirm={handleRegen}
         onCancel={() => setConfirmRegen(false)}
       />
-    </div>
+    </Card>
   );
 }
 
@@ -705,7 +782,10 @@ export default function ProvidersPage() {
 
   const [editModal, setEditModal] = useState({ open: false, provider: null });
   const [testModal, setTestModal] = useState({ open: false, provider: null });
-  const [disconnectConfirm, setDisconnectConfirm] = useState({ open: false, provider: null });
+  const [disconnectConfirm, setDisconnectConfirm] = useState({
+    open: false,
+    provider: null,
+  });
   const [disconnectLoading, setDisconnectLoading] = useState(false);
 
   const load = useCallback(async () => {
@@ -727,10 +807,14 @@ export default function ProvidersPage() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const providerMap = {};
-  providers.forEach((p) => { providerMap[p.provider] = p; });
+  providers.forEach((p) => {
+    providerMap[p.provider] = p;
+  });
 
   async function handleDisconnect() {
     const key = disconnectConfirm.provider;
@@ -751,7 +835,7 @@ export default function ProvidersPage() {
   return (
     <div className="space-y-6">
       {is503 && (
-        <div className="px-4 py-3 rounded-lg bg-yellow-900/40 border border-yellow-700 text-yellow-300 text-sm">
+        <div className="px-3.5 py-2.5 rounded-[6px] bg-[#FEFCE8] border border-[#FEF08A] text-[#A16207] text-xs">
           ⚠ This server has no encryption key configured. Ask the operator to set ENCRYPTION_KEY. Provider forms are disabled.
         </div>
       )}
@@ -763,8 +847,11 @@ export default function ProvidersPage() {
       ) : (
         <>
           {connectedCount === 0 && !error && !is503 && (
-            <div className="px-4 py-3 rounded-lg bg-gray-800 border border-gray-700 text-gray-400 text-sm">
-              No provider connected yet. Connect one to start sending.
+            <div className="px-3.5 py-2.5 rounded-[6px] bg-white border border-[#E7E5E4] text-[#78716C] text-xs flex items-center gap-2">
+              <Info className="w-4 h-4 text-[#4F46E5] shrink-0" strokeWidth={1.5} />
+              <span>
+                No external providers connected yet. Connect your email or SMS gateways to route notifications directly.
+              </span>
             </div>
           )}
 
@@ -778,7 +865,9 @@ export default function ProvidersPage() {
                 is503={is503}
                 onEdit={(k) => setEditModal({ open: true, provider: k })}
                 onTest={(k) => setTestModal({ open: true, provider: k })}
-                onDisconnect={(k) => setDisconnectConfirm({ open: true, provider: k })}
+                onDisconnect={(k) =>
+                  setDisconnectConfirm({ open: true, provider: k })
+                }
               />
             ))}
           </div>
@@ -793,7 +882,10 @@ export default function ProvidersPage() {
           info={providerMap[editModal.provider]}
           is503={is503}
           onClose={() => setEditModal({ open: false, provider: null })}
-          onSaved={() => { setEditModal({ open: false, provider: null }); load(); }}
+          onSaved={() => {
+            setEditModal({ open: false, provider: null });
+            load();
+          }}
         />
       )}
 
@@ -807,8 +899,13 @@ export default function ProvidersPage() {
 
       <ConfirmDialog
         open={disconnectConfirm.open}
-        title={`Disconnect ${disconnectConfirm.provider ? PROVIDER_META[disconnectConfirm.provider]?.label : ''}?`}
-        message="This will remove the provider configuration. Sending will stop until you reconnect."
+        destructive
+        title={`Disconnect ${
+          disconnectConfirm.provider
+            ? PROVIDER_META[disconnectConfirm.provider]?.label
+            : ''
+        }?`}
+        message="This will remove the provider configuration from this workspace. Delivery will fail until you reconnect."
         confirmLabel="Disconnect"
         loading={disconnectLoading}
         onConfirm={handleDisconnect}

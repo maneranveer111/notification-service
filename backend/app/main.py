@@ -17,7 +17,7 @@ from app.api.accounts import router as accounts_router
 from app.api.public import router as public_router
 from app.api.admin import router as admin_router
 from app.api.auth import router as auth_router
-from app.api.invitations import router as invitations_router
+from app.api.invitations import router as invitations_router, user_invitations_router
 from app.api.metrics import HTTP_REQUEST_DURATION_SECONDS, HTTP_REQUESTS_TOTAL, router as metrics_router
 from app.api.notifications import router as notifications_router
 from app.api.providers import router as providers_router
@@ -153,6 +153,7 @@ app.include_router(stats_router)
 app.include_router(metrics_router)
 app.include_router(workspaces_router)
 app.include_router(invitations_router)
+app.include_router(user_invitations_router)
 app.include_router(providers_router)
 
 

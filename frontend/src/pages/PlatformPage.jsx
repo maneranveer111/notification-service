@@ -7,6 +7,9 @@ import ErrorBanner from '../components/ErrorBanner';
 import Loading from '../components/Loading';
 import EmptyState from '../components/EmptyState';
 import Pagination from '../components/Pagination';
+import Card from '../components/ui/Card';
+import PageHeader from '../components/ui/PageHeader';
+import { ShieldCheck } from 'lucide-react';
 
 const PLANS = ['free', 'pro', 'unlimited'];
 
@@ -51,7 +54,9 @@ function PlatformContent() {
     }
   }, [page, pageSize]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   async function handlePlanChange() {
     const { ws, newPlan } = planConfirm;
@@ -61,7 +66,7 @@ function PlatformContent() {
         method: 'PATCH',
         body: JSON.stringify({ plan: newPlan }),
       });
-      setItems((prev) => prev.map((w) => w.id === ws.id ? { ...w, plan: updated.plan } : w));
+      setItems((prev) => (prev.map((w) => (w.id === ws.id ? { ...w, plan: updated.plan } : w))));
       setPlanConfirm({ open: false, ws: null, newPlan: null });
     } catch (e) {
       setError(e);
@@ -79,7 +84,7 @@ function PlatformContent() {
         method: 'PATCH',
         body: JSON.stringify({ use_platform_providers: newValue }),
       });
-      setItems((prev) => prev.map((w) => w.id === ws.id ? { ...w, use_platform_providers: updated.use_platform_providers } : w));
+      setItems((prev) => (prev.map((w) => (w.id === ws.id ? { ...w, use_platform_providers: updated.use_platform_providers } : w))));
       setProviderConfirm({ open: false, ws: null, newValue: null });
     } catch (e) {
       setError(e);
@@ -91,56 +96,61 @@ function PlatformContent() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold text-white">Platform Admin</h1>
+      <PageHeader
+        title="Platform Admin"
+        subtitle="Manage all tenant workspaces, subscription tiers, and provider routing across the instance."
+      />
 
       {error && <ErrorBanner error={error} onRetry={load} />}
 
       {loading ? (
         <Loading text="Loading workspaces…" />
       ) : items.length === 0 ? (
-        <EmptyState message="No workspaces found." />
+        <EmptyState icon={ShieldCheck} title="No workspaces found" description="No tenant workspaces have been registered yet." />
       ) : (
-        <div className="space-y-4">
+        <Card className="overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[800px]">
+            <table className="w-full text-xs">
               <thead>
-                <tr className="text-left text-xs text-gray-400 uppercase tracking-wide border-b border-gray-800">
-                  <th className="pb-3 pr-4">Name</th>
-                  <th className="pb-3 pr-4">Slug</th>
-                  <th className="pb-3 pr-4">Plan</th>
-                  <th className="pb-3 pr-4">Members</th>
-                  <th className="pb-3 pr-4">Platform providers</th>
-                  <th className="pb-3">Created</th>
+                <tr className="bg-[#F5F5F4] text-[#78716C] border-b border-[#E7E5E4]">
+                  <th className="px-4 py-3 text-left font-semibold text-[11px] uppercase tracking-wider">Name</th>
+                  <th className="px-4 py-3 text-left font-semibold text-[11px] uppercase tracking-wider">Slug</th>
+                  <th className="px-4 py-3 text-left font-semibold text-[11px] uppercase tracking-wider">Plan</th>
+                  <th className="px-4 py-3 text-left font-semibold text-[11px] uppercase tracking-wider">Members</th>
+                  <th className="px-4 py-3 text-left font-semibold text-[11px] uppercase tracking-wider">Platform Providers</th>
+                  <th className="px-4 py-3 text-left font-semibold text-[11px] uppercase tracking-wider">Created</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-800">
+              <tbody className="divide-y divide-[#E7E5E4] bg-white">
                 {items.map((ws) => (
-                  <tr key={ws.id} className="text-gray-300">
-                    <td className="py-3 pr-4 text-white font-medium">{ws.name}</td>
-                    <td className="py-3 pr-4 text-gray-400 font-mono text-xs">{ws.slug}</td>
-                    <td className="py-3 pr-4">
+                  <tr key={ws.id} className="hover:bg-[#FAFAF9] transition-colors">
+                    <td className="px-4 py-3 text-[#1C1917] font-medium">{ws.name}</td>
+                    <td className="px-4 py-3 text-[#78716C] font-mono text-[11px]">{ws.slug}</td>
+                    <td className="px-4 py-3">
                       <select
                         value={ws.plan}
                         onChange={(e) => setPlanConfirm({ open: true, ws, newPlan: e.target.value })}
-                        className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+                        className="rounded-[6px] border border-[#E7E5E4] bg-white px-2.5 py-1 text-xs text-[#1C1917] focus:border-[#4F46E5] focus:outline-none"
                         aria-label={`Plan for ${ws.name}`}
                       >
                         {PLANS.map((p) => (
-                          <option key={p} value={p}>{p}</option>
+                          <option key={p} value={p}>
+                            {p.charAt(0).toUpperCase() + p.slice(1)}
+                          </option>
                         ))}
                       </select>
                     </td>
-                    <td className="py-3 pr-4">{ws.member_count}</td>
-                    <td className="py-3 pr-4">
+                    <td className="px-4 py-3 text-[#44403C]">{ws.member_count}</td>
+                    <td className="px-4 py-3">
                       <input
                         type="checkbox"
                         checked={ws.use_platform_providers}
                         onChange={(e) => setProviderConfirm({ open: true, ws, newValue: e.target.checked })}
-                        className="rounded border-gray-600 bg-gray-800 text-blue-500 cursor-pointer"
+                        className="rounded border-[#D6D3D1] text-[#4F46E5] focus:ring-[#4F46E5] cursor-pointer"
                         aria-label={`Platform providers for ${ws.name}`}
                       />
                     </td>
-                    <td className="py-3 text-gray-400">
+                    <td className="px-4 py-3 text-[#78716C]">
                       {new Date(ws.created_at).toLocaleDateString()}
                     </td>
                   </tr>
@@ -156,7 +166,7 @@ function PlatformContent() {
             onPageChange={(p) => setPage(p)}
             onPageSizeChange={() => {}}
           />
-        </div>
+        </Card>
       )}
 
       <ConfirmDialog

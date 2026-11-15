@@ -1,11 +1,22 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import {
+  Mail,
+  MessageSquare,
+  Upload,
+  Send,
+  Check,
+  AlertCircle,
+} from 'lucide-react';
 import { sendBulk, getBatchStatus, listTemplates } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { parseRecipientsData } from '../lib/csv';
 import { describeError } from '../lib/errors';
 import StatusBadge from '../components/StatusBadge';
-import ErrorBanner from '../components/ErrorBanner';
+import Button from '../components/ui/Button';
+import Input from '../components/ui/Input';
+import Select from '../components/ui/Select';
+import Switch from '../components/ui/Switch';
 
 export default function BulkPage() {
   const { canWrite } = useAuth();
@@ -34,8 +45,8 @@ export default function BulkPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [errorAction, setErrorAction] = useState(null);
-  const [batchInfo, setBatchInfo] = useState(null); // { batch_id, queued, suppressed, ids }
-  const [batchStatus, setBatchStatus] = useState(null); // { batch_id, total, counts_by_status }
+  const [batchInfo, setBatchInfo] = useState(null);
+  const [batchStatus, setBatchStatus] = useState(null);
   const pollTimerRef = useRef(null);
 
   // Fetch templates once on mount
@@ -46,15 +57,15 @@ export default function BulkPage() {
   }, []);
 
   const channelTemplates = allTemplates.filter((t) => t.channel === channel);
-  const selectedTemplate = channelTemplates.find((t) => t.id === selectedTemplateId);
+  const selectedTemplate = channelTemplates.find(
+    (t) => t.id === selectedTemplateId
+  );
   const templateVariables = selectedTemplate?.variables || [];
 
-  // Reset selected template if channel changes
   useEffect(() => {
     setSelectedTemplateId('');
   }, [channel]);
 
-  // Handle CSV file upload
   function handleFileUpload(e) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -69,14 +80,12 @@ export default function BulkPage() {
     reader.readAsText(file);
   }
 
-  // Parse recipients
   const parsed = parseRecipientsData(rawText, {
     channel,
     hasTemplate: useTemplate,
     templateVariables,
   });
 
-  // Validation
   let formError = null;
   if (useTemplate && !selectedTemplate) {
     formError = 'Please select a template.';
@@ -85,7 +94,8 @@ export default function BulkPage() {
     else if (!body.trim()) formError = 'Body is required.';
   } else if (!useTemplate && channel === 'sms') {
     if (!body.trim()) formError = 'Message is required.';
-    else if (body.length > 1600) formError = 'Message cannot exceed 1600 characters.';
+    else if (body.length > 1600)
+      formError = 'Message cannot exceed 1600 characters.';
   }
 
   let scheduleIso = null;
@@ -106,9 +116,11 @@ export default function BulkPage() {
     }
   }
 
-  const isBlocked = Boolean(formError) || parsed.errors.length > 0 || parsed.validRows.length === 0;
+  const isBlocked =
+    Boolean(formError) ||
+    parsed.errors.length > 0 ||
+    parsed.validRows.length === 0;
 
-  // Poll batch status
   useEffect(() => {
     if (!batchInfo?.batch_id) return;
 
@@ -117,9 +129,13 @@ export default function BulkPage() {
         const status = await getBatchStatus(batchInfo.batch_id);
         setBatchStatus(status);
 
-        // Check if all items finished
         const counts = status.counts_by_status || {};
-        const activeStatuses = ['pending', 'processing', 'retrying', 'scheduled'];
+        const activeStatuses = [
+          'pending',
+          'processing',
+          'retrying',
+          'scheduled',
+        ];
         const hasActive = activeStatuses.some((st) => (counts[st] || 0) > 0);
 
         if (!hasActive && pollTimerRef.current) {
@@ -177,7 +193,6 @@ export default function BulkPage() {
 
       const res = await sendBulk(payload);
       setBatchInfo(res);
-      // Clear inputs
       setRawText('');
       setFileName('');
       setSubject('');
@@ -196,18 +211,23 @@ export default function BulkPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Bulk Notifications</h1>
+    <div className="space-y-6 max-w-[760px]">
+      <div>
+        <h1 className="text-xl sm:text-2xl font-semibold text-[#1C1917] tracking-tight">
+          Bulk Notifications
+        </h1>
+        <p className="text-xs sm:text-sm text-[#78716C] mt-0.5">
+          Dispatch a single message to up to 200 recipients simultaneously.
+        </p>
       </div>
 
       {error && (
-        <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-lg bg-red-900/30 border border-red-700 text-red-300 text-sm">
-          <span>⚠ {typeof error === 'string' ? error : error?.message || String(error)}</span>
+        <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-[6px] bg-[#FEF2F2] border border-[#FECACA] text-[#B91C1C] text-xs">
+          <span>{typeof error === 'string' ? error : error?.message || String(error)}</span>
           {errorAction && (
             <Link
               to={errorAction.to}
-              className="shrink-0 px-3 py-1 rounded bg-red-800 hover:bg-red-700 text-red-100 text-xs font-medium"
+              className="shrink-0 px-2.5 py-1 rounded-[4px] bg-white border border-[#FECACA] hover:bg-[#FEF2F2] text-[#B91C1C] font-medium"
             >
               {errorAction.label}
             </Link>
@@ -217,147 +237,182 @@ export default function BulkPage() {
 
       {/* Batch Summary Card */}
       {batchInfo && (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-xl space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-800 pb-4">
+        <div className="bg-white border border-[#E7E5E4] rounded-[8px] p-5 shadow-xs space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E7E5E4] pb-3">
             <div>
-              <h2 className="text-lg font-semibold text-emerald-400">Batch Queued Successfully!</h2>
-              <p className="text-xs font-mono text-gray-400 mt-0.5">Batch ID: {batchInfo.batch_id}</p>
+              <h3 className="text-sm font-semibold text-[#15803D] flex items-center gap-1.5">
+                <Check className="w-4 h-4" strokeWidth={2} />
+                Batch Queued Successfully
+              </h3>
+              <p className="text-xs font-mono text-[#78716C] mt-0.5">
+                Batch ID: {batchInfo.batch_id}
+              </p>
             </div>
             <Link
-              to={`/notifications?batch_id=${encodeURIComponent(batchInfo.batch_id)}`}
-              className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors"
+              to={`/notifications?batch_id=${encodeURIComponent(
+                batchInfo.batch_id
+              )}`}
             >
-              View Notifications &rarr;
+              <Button variant="secondary" size="sm">
+                View in Notifications →
+              </Button>
             </Link>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
-            <div className="p-3 bg-gray-950 rounded-lg border border-gray-800">
-              <span className="text-xs text-gray-500 block">Queued</span>
-              <span className="text-xl font-bold text-emerald-400">{batchInfo.queued}</span>
+          <div className="grid grid-cols-3 gap-3 text-xs">
+            <div className="p-3 bg-[#FAFAF9] rounded-[6px] border border-[#E7E5E4]">
+              <span className="text-[#78716C] block">Queued</span>
+              <span className="text-lg font-semibold text-[#15803D]">
+                {batchInfo.queued}
+              </span>
             </div>
-            <div className="p-3 bg-gray-950 rounded-lg border border-gray-800">
-              <span className="text-xs text-gray-500 block">Suppressed</span>
-              <span className="text-xl font-bold text-amber-400">{batchInfo.suppressed}</span>
+            <div className="p-3 bg-[#FAFAF9] rounded-[6px] border border-[#E7E5E4]">
+              <span className="text-[#78716C] block">Suppressed</span>
+              <span className="text-lg font-semibold text-[#A16207]">
+                {batchInfo.suppressed}
+              </span>
             </div>
-            <div className="p-3 bg-gray-950 rounded-lg border border-gray-800 col-span-2 sm:col-span-1">
-              <span className="text-xs text-gray-500 block">Total In Batch</span>
-              <span className="text-xl font-bold text-white">{batchStatus?.total ?? batchInfo.queued + batchInfo.suppressed}</span>
+            <div className="p-3 bg-[#FAFAF9] rounded-[6px] border border-[#E7E5E4]">
+              <span className="text-[#78716C] block">Total In Batch</span>
+              <span className="text-lg font-semibold text-[#1C1917]">
+                {batchStatus?.total ?? batchInfo.queued + batchInfo.suppressed}
+              </span>
             </div>
           </div>
 
           {batchStatus?.counts_by_status && (
-            <div className="space-y-2 pt-2">
-              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Live Status Breakdown</p>
+            <div className="space-y-1.5 pt-1">
+              <p className="text-[11px] font-semibold text-[#78716C] uppercase tracking-wider">
+                Live Status Breakdown
+              </p>
               <div className="flex flex-wrap gap-2">
-                {Object.entries(batchStatus.counts_by_status).map(([st, count]) => (
-                  <div key={st} className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-gray-950 border border-gray-800 text-xs">
-                    <StatusBadge status={st} />
-                    <span className="font-semibold text-gray-200">{count}</span>
-                  </div>
-                ))}
+                {Object.entries(batchStatus.counts_by_status).map(
+                  ([st, count]) => (
+                    <div
+                      key={st}
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] bg-[#FAFAF9] border border-[#E7E5E4] text-xs"
+                    >
+                      <StatusBadge status={st} />
+                      <span className="font-semibold text-[#1C1917]">
+                        {count}
+                      </span>
+                    </div>
+                  )
+                )}
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* Bulk Form */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-xl space-y-6">
-        {/* Channel Selector */}
-        <div className="flex gap-2 border-b border-gray-800 pb-4">
-          <button
-            type="button"
-            onClick={() => setChannel('email')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              channel === 'email' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-            }`}
-          >
-            Email
-          </button>
-          <button
-            type="button"
-            onClick={() => setChannel('sms')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              channel === 'sms' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-            }`}
-          >
-            SMS
-          </button>
+      {/* Bulk Form Card */}
+      <div className="bg-white border border-[#E7E5E4] rounded-[8px] p-6 shadow-xs space-y-6">
+        {/* Underline Tabs */}
+        <div className="border-b border-[#E7E5E4] -mt-1 pb-px">
+          <div className="flex gap-6">
+            <button
+              type="button"
+              onClick={() => setChannel('email')}
+              className={`pb-2.5 text-xs sm:text-sm font-medium border-b-2 flex items-center gap-2 cursor-pointer transition-colors ${
+                channel === 'email'
+                  ? 'border-[#4F46E5] text-[#1C1917]'
+                  : 'border-transparent text-[#78716C] hover:text-[#1C1917]'
+              }`}
+            >
+              <Mail className="w-4 h-4" strokeWidth={1.5} />
+              Email
+            </button>
+            <button
+              type="button"
+              onClick={() => setChannel('sms')}
+              className={`pb-2.5 text-xs sm:text-sm font-medium border-b-2 flex items-center gap-2 cursor-pointer transition-colors ${
+                channel === 'sms'
+                  ? 'border-[#4F46E5] text-[#1C1917]'
+                  : 'border-transparent text-[#78716C] hover:text-[#1C1917]'
+              }`}
+            >
+              <MessageSquare className="w-4 h-4" strokeWidth={1.5} />
+              SMS
+            </button>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Template toggle */}
-          <div>
-            <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-300">
-              <input
-                type="checkbox"
-                checked={useTemplate}
-                onChange={(e) => setUseTemplate(e.target.checked)}
-                className="rounded bg-gray-800 border-gray-700 text-blue-600 focus:ring-0"
-              />
-              Use a template for bulk sending
-            </label>
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Template Switch */}
+          <div className="pt-1">
+            <Switch
+              id="bulk-toggle-template"
+              label="Use a pre-built template"
+              description="Populate parameters dynamically per row from your CSV."
+              checked={useTemplate}
+              onChange={setUseTemplate}
+            />
           </div>
 
-          {/* Template Selection */}
+          {/* Template dropdown */}
           {useTemplate && (
-            <div className="p-4 rounded-xl bg-gray-950/60 border border-gray-800 space-y-2">
-              <label className="block text-sm font-medium text-gray-300">Choose Template</label>
-              {channelTemplates.length === 0 ? (
-                <p className="text-xs text-gray-500">No {channel.toUpperCase()} templates available.</p>
-              ) : (
-                <select
-                  value={selectedTemplateId}
-                  onChange={(e) => setSelectedTemplateId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white text-sm"
-                >
-                  <option value="">-- Choose a template --</option>
-                  {channelTemplates.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} (Variables: {t.variables?.length ? t.variables.join(', ') : 'none'})
-                    </option>
-                  ))}
-                </select>
-              )}
+            <div className="p-4 rounded-[6px] bg-[#FAFAF9] border border-[#E7E5E4] space-y-2">
+              <Select
+                id="bulk-template-select"
+                label="Choose Template"
+                value={selectedTemplateId}
+                onChange={(e) => setSelectedTemplateId(e.target.value)}
+              >
+                <option value="">-- Choose a template --</option>
+                {channelTemplates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} (Variables:{' '}
+                    {t.variables?.length ? t.variables.join(', ') : 'none'})
+                  </option>
+                ))}
+              </Select>
               {selectedTemplate && (
-                <div className="pt-2 text-xs text-gray-400">
-                  <p className="font-semibold text-gray-300">Required CSV Columns:</p>
-                  <p className="font-mono mt-0.5 text-blue-400">
-                    recipient{templateVariables.length ? `, ${templateVariables.join(', ')}` : ''}
-                  </p>
+                <div className="pt-1 text-xs text-[#78716C]">
+                  <span className="font-semibold text-[#1C1917]">
+                    Required CSV columns:
+                  </span>{' '}
+                  <code className="text-[#4F46E5] font-mono">
+                    recipient
+                    {templateVariables.length
+                      ? `, ${templateVariables.join(', ')}`
+                      : ''}
+                  </code>
                 </div>
               )}
             </div>
           )}
 
-          {/* Shared Content (when NOT using template) */}
+          {/* Shared Content */}
           {!useTemplate && channel === 'email' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1" htmlFor="bulk-subject">
-                Subject
-              </label>
-              <input
-                id="bulk-subject"
-                type="text"
-                required
-                maxLength={255}
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                placeholder="Shared email subject"
-                className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
-              />
-            </div>
+            <Input
+              id="bulk-subject"
+              label="Subject *"
+              type="text"
+              required
+              maxLength={255}
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              placeholder="Product Announcement"
+            />
           )}
 
           {!useTemplate && (
-            <div>
-              <div className="flex justify-between items-center mb-1">
-                <label className="block text-sm font-medium text-gray-300" htmlFor="bulk-body">
-                  {channel === 'email' ? 'Body' : 'Message'}
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center">
+                <label
+                  htmlFor="bulk-body"
+                  className="block text-xs font-medium text-[#1C1917]"
+                >
+                  {channel === 'email' ? 'Body Message *' : 'SMS Message *'}
                 </label>
                 {channel === 'sms' && (
-                  <span className={`text-xs ${body.length > 1600 ? 'text-red-400' : 'text-gray-400'}`}>
+                  <span
+                    className={`text-[11px] ${
+                      body.length > 1600
+                        ? 'text-[#B91C1C] font-semibold'
+                        : 'text-[#78716C]'
+                    }`}
+                  >
                     {body.length} / 1600
                   </span>
                 )}
@@ -369,24 +424,21 @@ export default function BulkPage() {
                 maxLength={channel === 'sms' ? 1600 : undefined}
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
-                placeholder={
-                  channel === 'email'
-                    ? 'Shared email body content...'
-                    : 'Shared SMS message content...'
-                }
-                className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
+                placeholder="Message markdown or text..."
+                className="w-full text-xs px-3 py-2 rounded-[6px] bg-white border border-[#E7E5E4] text-[#1C1917] placeholder:text-[#A8A29E] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
               />
             </div>
           )}
 
           {/* Recipients Section */}
-          <div className="space-y-3 pt-2 border-t border-gray-800">
+          <div className="space-y-3 pt-3 border-t border-[#E7E5E4]">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <label className="block text-sm font-medium text-gray-300">
-                Recipients (Max 200 total)
+              <label className="block text-xs font-medium text-[#1C1917]">
+                Recipients List (Max 200 total)
               </label>
-              <label className="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-medium cursor-pointer border border-gray-700">
-                <span>📁 Upload CSV</span>
+              <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] bg-white hover:bg-[#F5F5F4] border border-[#E7E5E4] text-xs font-medium text-[#1C1917] cursor-pointer shadow-xs transition-colors">
+                <Upload className="w-3.5 h-3.5 text-[#78716C]" strokeWidth={1.5} />
+                <span>Upload CSV</span>
                 <input
                   type="file"
                   accept=".csv,text/csv"
@@ -395,180 +447,156 @@ export default function BulkPage() {
                 />
               </label>
             </div>
+
             {fileName && (
-              <p className="text-xs text-blue-400">Uploaded file: {fileName}</p>
+              <p className="text-xs text-[#4F46E5]">Uploaded file: {fileName}</p>
             )}
+
             <textarea
               rows={6}
               value={rawText}
               onChange={(e) => setRawText(e.target.value)}
               placeholder={
                 useTemplate
-                  ? `recipient,${templateVariables.join(',') || 'var1'}\nuser1@example.com,John\nuser2@example.com,Sarah`
-                  : `user1@example.com\nuser2@example.com`
+                  ? `recipient,${templateVariables.join(',') || 'var1'}\nalex@example.com,Alex\nsarah@example.com,Sarah`
+                  : `alex@example.com\nsarah@example.com`
               }
-              className="w-full font-mono px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-xs"
+              className="w-full font-mono text-xs px-3 py-2 rounded-[6px] bg-white border border-[#E7E5E4] text-[#1C1917] placeholder:text-[#A8A29E] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
             />
           </div>
 
           {/* Counts & Preview */}
           {rawText.trim() && (
-            <div className="space-y-3 p-4 rounded-xl bg-gray-950 border border-gray-800">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <div className="p-2.5 rounded-lg bg-gray-900 border border-gray-800">
-                  <span className="text-gray-500 block">Parsed Rows</span>
-                  <span className={`text-base font-bold ${parsed.totalParsed > 200 ? 'text-red-400' : 'text-white'}`}>
+            <div className="space-y-3 p-4 rounded-[6px] bg-[#FAFAF9] border border-[#E7E5E4]">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <div className="p-2.5 rounded-[4px] bg-white border border-[#E7E5E4]">
+                  <span className="text-[#78716C] block text-[11px]">Parsed Rows</span>
+                  <span
+                    className={`text-sm font-semibold ${
+                      parsed.totalParsed > 200 ? 'text-[#B91C1C]' : 'text-[#1C1917]'
+                    }`}
+                  >
                     {parsed.totalParsed}
                   </span>
                 </div>
-                <div className="p-2.5 rounded-lg bg-gray-900 border border-gray-800">
-                  <span className="text-gray-500 block">Duplicates (Dropped)</span>
-                  <span className="text-base font-bold text-amber-400">{parsed.duplicateCount}</span>
-                </div>
-                <div className="p-2.5 rounded-lg bg-gray-900 border border-gray-800">
-                  <span className="text-gray-500 block">Invalid Format</span>
-                  <span className={`text-base font-bold ${parsed.invalidCount > 0 ? 'text-red-400' : 'text-white'}`}>
-                    {parsed.invalidCount}
+                <div className="p-2.5 rounded-[4px] bg-white border border-[#E7E5E4]">
+                  <span className="text-[#78716C] block text-[11px]">Valid</span>
+                  <span className="text-sm font-semibold text-[#15803D]">
+                    {parsed.validRows.length}
                   </span>
                 </div>
-                <div className="p-2.5 rounded-lg bg-gray-900 border border-gray-800">
-                  <span className="text-gray-500 block">Missing Variables</span>
-                  <span className={`text-base font-bold ${parsed.missingVarCount > 0 ? 'text-red-400' : 'text-white'}`}>
-                    {parsed.missingVarCount}
+                <div className="p-2.5 rounded-[4px] bg-white border border-[#E7E5E4]">
+                  <span className="text-[#78716C] block text-[11px]">Duplicates</span>
+                  <span className="text-sm font-semibold text-[#A16207]">
+                    {parsed.duplicateCount}
+                  </span>
+                </div>
+                <div className="p-2.5 rounded-[4px] bg-white border border-[#E7E5E4]">
+                  <span className="text-[#78716C] block text-[11px]">Invalid Format</span>
+                  <span
+                    className={`text-sm font-semibold ${
+                      parsed.invalidCount > 0 ? 'text-[#B91C1C]' : 'text-[#1C1917]'
+                    }`}
+                  >
+                    {parsed.invalidCount}
                   </span>
                 </div>
               </div>
 
-              {/* Blocking Errors in Red */}
               {parsed.errors.length > 0 && (
-                <div className="space-y-1">
+                <div className="space-y-1 pt-1">
                   {parsed.errors.map((err, i) => (
-                    <p key={i} className="text-xs text-red-400 font-medium">
-                      ✕ {err}
+                    <p key={i} className="text-xs text-[#B91C1C] flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      {err}
                     </p>
                   ))}
                 </div>
               )}
-
-              {/* Preview Table: First 20 rows */}
-              {parsed.rows.length > 0 && (
-                <div className="overflow-x-auto rounded-lg border border-gray-800 max-h-60 overflow-y-auto">
-                  <table className="w-full text-xs text-left">
-                    <thead className="bg-gray-900 text-gray-400 sticky top-0">
-                      <tr>
-                        <th className="px-3 py-2">#</th>
-                        <th className="px-3 py-2">Recipient</th>
-                        <th className="px-3 py-2">Status</th>
-                        {useTemplate && <th className="px-3 py-2">Variables</th>}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-800 font-mono">
-                      {parsed.rows.slice(0, 20).map((r) => (
-                        <tr key={r.index} className="bg-gray-950 hover:bg-gray-900/50">
-                          <td className="px-3 py-1.5 text-gray-500">{r.index}</td>
-                          <td className="px-3 py-1.5 truncate max-w-xs">{r.recipient || '<empty>'}</td>
-                          <td className="px-3 py-1.5">
-                            {!r.isValid ? (
-                              <span className="text-red-400">Invalid</span>
-                            ) : r.isDuplicate ? (
-                              <span className="text-amber-400">Duplicate</span>
-                            ) : r.missingVars?.length > 0 ? (
-                              <span className="text-red-400">Missing vars</span>
-                            ) : (
-                              <span className="text-emerald-400">Valid</span>
-                            )}
-                          </td>
-                          {useTemplate && (
-                            <td className="px-3 py-1.5 text-gray-400 truncate max-w-xs">
-                              {r.missingVars?.length > 0 ? (
-                                <span className="text-red-400">Missing: {r.missingVars.join(', ')}</span>
-                              ) : (
-                                JSON.stringify(r.variables || {})
-                              )}
-                            </td>
-                          )}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              {parsed.rows.length > 20 && (
-                <p className="text-xs text-gray-500 text-right">Showing first 20 of {parsed.rows.length} rows</p>
-              )}
             </div>
           )}
 
-          {/* Options: Priority, Category, Schedule */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-gray-800">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Priority</label>
-              <select
-                value={priority}
-                onChange={(e) => setPriority(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white text-sm"
-              >
-                <option value="high">High</option>
-                <option value="normal">Normal</option>
-                <option value="low">Low</option>
-              </select>
-            </div>
+          {/* Options: Priority & Category */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-[#E7E5E4]">
+            <Select
+              id="bulk-priority"
+              label="Priority Level"
+              value={priority}
+              onChange={(e) => setPriority(e.target.value)}
+            >
+              <option value="high">High</option>
+              <option value="normal">Normal</option>
+              <option value="low">Low</option>
+            </Select>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Category</label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white text-sm"
-              >
-                <option value="transactional">Transactional</option>
-                <option value="marketing">Marketing</option>
-              </select>
-              <p className="text-xs text-gray-500 mt-1">
-                marketing respects unsubscribes and adds an unsubscribe link; transactional is for OTPs and receipts
-              </p>
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-[#1C1917]">
+                Category
+              </label>
+              <div className="inline-flex rounded-[6px] border border-[#E7E5E4] bg-[#FAFAF9] p-0.5 w-full">
+                <button
+                  type="button"
+                  onClick={() => setCategory('transactional')}
+                  className={`flex-1 py-1.5 text-xs font-medium rounded-[4px] transition-colors cursor-pointer ${
+                    category === 'transactional'
+                      ? 'bg-white text-[#1C1917] shadow-xs'
+                      : 'text-[#78716C] hover:text-[#1C1917]'
+                  }`}
+                >
+                  Transactional
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCategory('marketing')}
+                  className={`flex-1 py-1.5 text-xs font-medium rounded-[4px] transition-colors cursor-pointer ${
+                    category === 'marketing'
+                      ? 'bg-white text-[#1C1917] shadow-xs'
+                      : 'text-[#78716C] hover:text-[#1C1917]'
+                  }`}
+                >
+                  Marketing
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Scheduling */}
-          <div className="space-y-2 pt-2 border-t border-gray-800">
-            <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-300">
-              <input
-                type="checkbox"
-                checked={isScheduled}
-                onChange={(e) => setIsScheduled(e.target.checked)}
-                className="rounded bg-gray-800 border-gray-700 text-blue-600 focus:ring-0"
-              />
-              Schedule bulk delivery
-            </label>
+          {/* Scheduling Switch */}
+          <div className="space-y-3 pt-3 border-t border-[#E7E5E4]">
+            <Switch
+              id="bulk-toggle-schedule"
+              label="Schedule bulk delivery for later"
+              checked={isScheduled}
+              onChange={setIsScheduled}
+            />
             {isScheduled && (
-              <div>
-                <input
+              <div className="pl-12 max-w-xs">
+                <Input
+                  id="bulk-schedule-time"
                   type="datetime-local"
                   value={scheduledAtRaw}
                   onChange={(e) => setScheduledAtRaw(e.target.value)}
-                  className="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white text-sm"
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Must be in the future and at most 30 days ahead.
-                </p>
               </div>
             )}
           </div>
 
           {/* Submit */}
-          <div className="pt-4">
-            <button
+          <div className="pt-4 border-t border-[#E7E5E4] flex justify-end">
+            <Button
               type="submit"
+              variant="primary"
+              size="md"
+              loading={loading}
               disabled={loading || isBlocked}
-              className="w-full sm:w-auto px-6 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium transition-colors"
+              icon={Send}
             >
-              {loading ? 'Queuing Batch...' : `Send Bulk (${parsed.validRows.length} valid recipients)`}
-            </button>
+              {loading
+                ? 'Queuing batch…'
+                : `Send to ${parsed.validRows.length} recipients`}
+            </Button>
           </div>
         </form>
       </div>
     </div>
   );
 }
-

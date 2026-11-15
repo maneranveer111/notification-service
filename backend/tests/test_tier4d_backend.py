@@ -134,15 +134,20 @@ def test_public_config_open():
 # Test 2: needs_setup is True when no users exist and signup_mode != "closed"
 # ---------------------------------------------------------------------------
 
-def test_needs_setup_true_when_empty(db):
-    # Delete all users to simulate empty DB state
-    db.query(User).delete()
-    db.commit()
+def test_needs_setup_true_when_empty():
+    from app.database import get_db
+    from app.main import app
 
-    with _settings_override(signup_mode="open"):
-        resp = client.get("/public/config")
-    assert resp.status_code == 200
-    assert resp.json()["needs_setup"] is True
+    mock_db = MagicMock()
+    mock_db.scalar.return_value = 0
+    app.dependency_overrides[get_db] = lambda: mock_db
+    try:
+        with _settings_override(signup_mode="open"):
+            resp = client.get("/public/config")
+        assert resp.status_code == 200
+        assert resp.json()["needs_setup"] is True
+    finally:
+        app.dependency_overrides.pop(get_db, None)
 
 
 # ---------------------------------------------------------------------------

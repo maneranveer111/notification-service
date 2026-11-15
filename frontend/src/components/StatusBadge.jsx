@@ -1,5 +1,3 @@
-import { STATUS_COLORS } from '../lib/constants';
-
 const LABELS = {
   pending: 'Pending',
   processing: 'Processing',
@@ -14,26 +12,46 @@ const LABELS = {
   suppressed: 'Suppressed',
 };
 
-const COLOR_CLASSES = {
-  yellow: 'bg-yellow-900/40 text-yellow-300 border-yellow-700',
-  blue: 'bg-blue-900/40 text-blue-300 border-blue-700',
-  green: 'bg-green-900/40 text-green-300 border-green-700',
-  amber: 'bg-amber-900/40 text-amber-300 border-amber-700',
-  red: 'bg-red-900/40 text-red-300 border-red-700',
-  emerald: 'bg-emerald-900/40 text-emerald-300 border-emerald-700',
-  orange: 'bg-orange-900/40 text-orange-300 border-orange-700',
-  purple: 'bg-purple-900/40 text-purple-300 border-purple-700',
-  gray: 'bg-gray-700/40 text-gray-300 border-gray-600',
-  slate: 'bg-slate-700/40 text-slate-300 border-slate-600',
+const STYLES = {
+  delivered: 'bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]',
+  sent: 'bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]',
+  failed: 'bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]',
+  bounced: 'bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]',
+  undelivered: 'bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]',
+  retrying: 'bg-[#FEFCE8] text-[#A16207] border-[#FEF08A]',
+  pending: 'bg-[#F5F5F4] text-[#78716C] border-[#E7E5E4]',
+  processing: 'bg-[#EFF6FF] text-[#1D4ED8] border-[#BFDBFE]',
+  scheduled: 'bg-[#FAF5FF] text-[#7E22CE] border-[#E9D5FF]',
+  cancelled: 'bg-[#F5F5F4] text-[#78716C] border-[#E7E5E4]',
+  suppressed: 'bg-[#FEFCE8] text-[#A16207] border-[#FEF08A]',
 };
 
-export default function StatusBadge({ status }) {
-  const color = STATUS_COLORS[status] || 'gray';
-  const cls = COLOR_CLASSES[color] || COLOR_CLASSES.gray;
+const DOT_COLORS = {
+  delivered: 'bg-[#15803D]',
+  sent: 'bg-[#15803D]',
+  failed: 'bg-[#B91C1C]',
+  bounced: 'bg-[#B91C1C]',
+  undelivered: 'bg-[#B91C1C]',
+  retrying: 'bg-[#A16207]',
+  pending: 'bg-[#78716C]',
+  processing: 'bg-[#1D4ED8]',
+  scheduled: 'bg-[#7E22CE]',
+  cancelled: 'bg-[#78716C]',
+  suppressed: 'bg-[#A16207]',
+};
+
+export default function StatusBadge({ status, className = '' }) {
+  const norm = (status || '').toLowerCase();
+  const label = LABELS[norm] || status;
+  const style = STYLES[norm] || 'bg-[#F5F5F4] text-[#78716C] border-[#E7E5E4]';
+  const dot = DOT_COLORS[norm] || 'bg-[#78716C]';
+
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${cls}`}>
-      {LABELS[status] || status}
+    <span
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[11px] font-medium border ${style} ${className}`}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
+      <span>{label}</span>
     </span>
   );
 }
-

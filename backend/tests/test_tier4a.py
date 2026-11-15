@@ -145,6 +145,10 @@ def test_switch_workspace(db):
     data = switch_resp.json()
     assert "access_token" in data
     assert data["workspace"]["id"] == ws2_id
+    assert data["user"] is not None
+    assert data["user"]["id"] == str(user_a.id)
+    assert isinstance(data["workspaces"], list)
+    assert len(data["workspaces"]) >= 2
 
 
 def test_switch_workspace_forbidden_if_not_member(db):

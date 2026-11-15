@@ -44,6 +44,16 @@ def _settings_override(**kwargs):
 
 
 def _reset_db():
+    # Safety guard: refuse to run destructive cleanup against a non-test database.
+    from app.database import engine as _active_engine
+    _active_db_name = _active_engine.url.database or ""
+    if "test" not in _active_db_name.lower():
+        raise RuntimeError(
+            f"_reset_db() refused: active database is '{_active_db_name}', "
+            "which is not a recognized test database. "
+            "Set TEST_DATABASE_URL to a database whose name contains 'test'."
+        )
+
     try:
         r = get_redis_client()
         r.flushdb()

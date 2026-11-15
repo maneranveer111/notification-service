@@ -3,7 +3,11 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { getPublicConfig, apiFetch, ApiError } from '../lib/api';
 import { describeError } from '../lib/errors';
+import PasswordInput from '../components/PasswordInput';
 import Captcha from '../components/Captcha';
+import Button from '../components/ui/Button';
+import Input from '../components/ui/Input';
+import { AlertCircle } from 'lucide-react';
 
 /**
  * Returns the redirect destination only when it is a safe same-origin path:
@@ -67,7 +71,7 @@ export default function LoginPage() {
   function startCooldown() {
     setResendCooldown(60);
     cooldownRef.current = setInterval(() => {
-      setResendCooldown(prev => {
+      setResendCooldown((prev) => {
         if (prev <= 1) {
           clearInterval(cooldownRef.current);
           return 0;
@@ -119,54 +123,56 @@ export default function LoginPage() {
       startCooldown();
     } finally {
       setResendLoading(false);
-      setResetSignal(s => s + 1);
+      setResetSignal((s) => s + 1);
       setCaptchaToken(null);
     }
   }
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-        <p className="text-gray-500">Loading...</p>
+      <div className="min-h-screen flex items-center justify-center bg-[#FAFAF9]">
+        <div className="flex items-center gap-2 text-xs text-[#78716C]">
+          <div className="w-4 h-4 border-2 border-[#4F46E5] border-t-transparent rounded-full animate-spin" />
+          <span>Loading...</span>
+        </div>
       </div>
     );
   }
 
   if (resendMode) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-        <div className="w-full max-w-md bg-white rounded-xl shadow-md p-8">
-          <h1 className="text-xl font-bold text-gray-900 mb-2">Verify your email</h1>
-          <p className="text-gray-600 mb-6">
-            Your email address has not been verified. Enter your email below to receive a new
-            verification link.
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#FAFAF9] px-4 py-12">
+        <div className="w-full max-w-[400px] bg-white rounded-[10px] border border-[#E7E5E4] shadow-sm p-8">
+          <div className="flex items-center justify-center w-10 h-10 rounded-[8px] bg-[#4F46E5] text-white font-bold text-lg mb-6 shadow-sm">
+            N
+          </div>
+          <h1 className="text-xl font-bold tracking-tight text-[#1C1917] mb-1.5">Verify your email</h1>
+          <p className="text-xs text-[#78716C] mb-6 leading-relaxed">
+            Your email address has not been verified. Enter your email below to receive a new verification link.
           </p>
+
           {resendDone ? (
-            <>
-              <p className="text-green-700 text-sm mb-4">
-                If that account exists, we sent an email.
-              </p>
+            <div className="space-y-4">
+              <div className="p-3 rounded-[6px] bg-[#ECFDF5] border border-[#A7F3D0] text-[#047857] text-xs">
+                If that account exists, we sent a verification email.
+              </div>
               {resendCooldown > 0 && (
-                <p className="text-gray-500 text-sm">
+                <p className="text-xs text-[#78716C]">
                   You can request another in {resendCooldown}s.
                 </p>
               )}
-            </>
+            </div>
           ) : (
             <form onSubmit={handleResend} className="space-y-4">
-              <div>
-                <label htmlFor="resend-email" className="block text-sm font-medium text-gray-700">
-                  Email address
-                </label>
-                <input
-                  id="resend-email"
-                  type="email"
-                  required
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
+              <Input
+                label="Email address"
+                id="resend-email"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="name@company.com"
+              />
               {config?.turnstile_site_key && (
                 <Captcha
                   siteKey={config.turnstile_site_key}
@@ -174,90 +180,90 @@ export default function LoginPage() {
                   resetSignal={resetSignal}
                 />
               )}
-              <button
-                type="submit"
-                disabled={resendLoading}
-                className="w-full py-2 px-4 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
-              >
-                {resendLoading ? 'Sending...' : 'Send verification email'}
-              </button>
+              <Button type="submit" loading={resendLoading} className="w-full">
+                Send verification email
+              </Button>
             </form>
           )}
-          <button
-            type="button"
-            onClick={() => setResendMode(false)}
-            className="mt-4 block text-sm text-indigo-600 hover:underline"
-          >
-            Back to login
-          </button>
+
+          <div className="mt-6 pt-5 border-t border-[#E7E5E4] text-center">
+            <button
+              type="button"
+              onClick={() => setResendMode(false)}
+              className="text-xs font-medium text-[#4F46E5] hover:text-[#4338CA] transition-colors"
+            >
+              Back to login
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md bg-white rounded-xl shadow-md p-8">
-        <h1 className="text-xl font-bold text-gray-900 mb-6">Sign in to your account</h1>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[#FAFAF9] px-4 py-12">
+      <div className="w-full max-w-[400px] bg-white rounded-[10px] border border-[#E7E5E4] shadow-sm p-8">
+        <div className="flex items-center justify-center w-10 h-10 rounded-[8px] bg-[#4F46E5] text-white font-bold text-lg mb-6 shadow-sm">
+          N
+        </div>
+        <h1 className="text-xl font-bold tracking-tight text-[#1C1917] mb-1">Sign in to Notify</h1>
+        <p className="text-xs text-[#78716C] mb-6">Welcome back. Enter your credentials to continue.</p>
+
         {error && (
-          <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-            {error}
+          <div className="mb-5 p-3 rounded-[6px] bg-[#FEF2F2] border border-[#FECACA] flex items-start gap-2.5 text-[#B91C1C] text-xs">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" strokeWidth={1.5} />
+            <span>{error}</span>
           </div>
         )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
+          <Input
+            label="Email"
+            id="email"
+            type="email"
+            autoComplete="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="name@company.com"
+          />
+
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              autoComplete="email"
-              required
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-              Password
-            </label>
-            <input
+            <PasswordInput
               id="password"
-              type="password"
+              label="Password"
               autoComplete="current-password"
               required
               value={password}
-              onChange={e => setPassword(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              onChange={(e) => setPassword(e.target.value)}
             />
+            <div className="flex justify-end mt-1.5">
+              <Link
+                to="/forgot-password"
+                className="text-[11px] text-[#78716C] hover:text-[#1C1917] transition-colors"
+              >
+                Forgot password?
+              </Link>
+            </div>
           </div>
-          <div className="flex items-center justify-end">
-            <Link to="/forgot-password" className="text-sm text-indigo-600 hover:underline">
-              Forgot password?
-            </Link>
-          </div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-2 px-4 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
-          >
-            {loading ? 'Signing in...' : 'Sign in'}
-          </button>
+
+          <Button type="submit" loading={loading} className="w-full mt-2">
+            Sign in
+          </Button>
         </form>
-        <p className="mt-4 text-sm text-gray-600">
+
+        <div className="mt-6 pt-5 border-t border-[#E7E5E4] text-center text-xs text-[#78716C]">
           {config?.signup_mode === 'open' || config?.needs_setup ? (
             <>
-              Don't have an account?{' '}
-              <Link to="/signup" className="text-indigo-600 hover:underline">
+              Don&apos;t have an account?{' '}
+              <Link to="/signup" className="text-[#4F46E5] hover:text-[#4338CA] font-medium transition-colors">
                 Create an account
               </Link>
             </>
           ) : (
             'Accounts are created by invitation.'
           )}
-        </p>
+        </div>
       </div>
     </div>
   );
