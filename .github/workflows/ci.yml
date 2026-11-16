@@ -46,6 +46,11 @@ jobs:
       PUBLIC_BASE_URL: http://localhost:8001
       FRONTEND_URL: http://localhost:5173
       CELERY_QUEUE: notification_service_ci
+      BREVO_API_KEY: dummy-ci-brevo-key
+      BREVO_FROM_EMAIL: test@example.com
+      TWILIO_ACCOUNT_SID: AC00000000000000000000000000000000
+      TWILIO_AUTH_TOKEN: dummy-ci-twilio-auth-token
+      TWILIO_FROM_NUMBER: "+15555550199"
 
     steps:
       - name: Checkout repository
@@ -102,6 +107,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Create .env from .env.example
+        run: cp .env.example .env
 
       - name: Validate docker-compose config
         run: docker compose config --quiet
