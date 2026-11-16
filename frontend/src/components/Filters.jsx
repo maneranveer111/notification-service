@@ -1,40 +1,57 @@
+import Select from './ui/Select';
+import Button from './ui/Button';
+import { RefreshCw } from 'lucide-react';
+
 export default function Filters({ status, channel, onStatusChange, onChannelChange, onRefresh }) {
+  const statusOptions = [
+    { value: '', label: 'All statuses' },
+    { value: 'pending', label: 'Pending' },
+    { value: 'processing', label: 'Processing' },
+    { value: 'sent', label: 'Sent' },
+    { value: 'delivered', label: 'Delivered' },
+    { value: 'retrying', label: 'Retrying' },
+    { value: 'failed', label: 'Failed' },
+    { value: 'bounced', label: 'Bounced' },
+    { value: 'undelivered', label: 'Undelivered' },
+    { value: 'scheduled', label: 'Scheduled' },
+    { value: 'cancelled', label: 'Cancelled' },
+    { value: 'suppressed', label: 'Suppressed' },
+  ];
+
+  const channelOptions = [
+    { value: '', label: 'All channels' },
+    { value: 'email', label: 'Email' },
+    { value: 'sms', label: 'SMS' },
+    { value: 'webhook', label: 'Webhook' },
+  ];
+
   return (
-    <div className="bg-white rounded-lg shadow p-4 mb-4 flex flex-wrap gap-4 items-end">
-      <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
-        <select
+    <div className="bg-white rounded-[8px] border border-[#E7E5E4] p-3.5 mb-4 flex flex-wrap items-center gap-3 shadow-sm">
+      <div className="w-44">
+        <Select
           value={status}
           onChange={(e) => onStatusChange(e.target.value)}
-          className="border border-gray-300 rounded-md px-3 py-2 text-sm"
-        >
-          <option value="">All</option>
-          <option value="pending">Pending</option>
-          <option value="sent">Sent</option>
-          <option value="failed">Failed</option>
-          <option value="retrying">Retrying</option>
-        </select>
+          options={statusOptions}
+        />
       </div>
 
-      <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Channel</label>
-        <select
+      <div className="w-40">
+        <Select
           value={channel}
           onChange={(e) => onChannelChange(e.target.value)}
-          className="border border-gray-300 rounded-md px-3 py-2 text-sm"
-        >
-          <option value="">All</option>
-          <option value="email">Email</option>
-          <option value="sms">SMS</option>
-        </select>
+          options={channelOptions}
+        />
       </div>
 
-      <button
+      <Button
+        variant="secondary"
+        size="md"
+        icon={RefreshCw}
         onClick={onRefresh}
-        className="bg-gray-100 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-200"
+        className="ml-auto"
       >
         Refresh
-      </button>
+      </Button>
     </div>
   );
 }

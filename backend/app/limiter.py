@@ -1,22 +1,30 @@
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from fastapi import Request
 from fastapi.responses import JSONResponse
+
+from app.config import get_settings
+from app.services.client_ip import client_ip
 
 
 def get_api_key(request: Request) -> str:
     """
     Use API key as identifier for rate limiting.
-    Falls back to IP address if no API key present.
+    Falls back to client IP address if no API key present.
     """
     api_key = request.headers.get("X-API-Key")
     if api_key:
         return api_key
-    return get_remote_address(request)
+    return client_ip(request)
 
 
-limiter = Limiter(key_func=get_api_key)
+settings = get_settings()
+
+limiter = Limiter(
+    key_func=get_api_key,
+    storage_uri=settings.rate_limit_storage_uri,
+    in_memory_fallback_enabled=True,
+)
 
 
 def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
@@ -27,7 +35,7 @@ def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSO
         status_code=429,
         content={
             "detail": "Rate limit exceeded. Try again later.",
-            "limit": str(exc.limit.limit),   # ← fix: access .limit.limit to get readable string
+            "limit": str(exc.limit.limit),
             "retry_after": "60 seconds",
         },
     )

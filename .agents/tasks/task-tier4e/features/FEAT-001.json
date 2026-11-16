@@ -1,0 +1,37 @@
+{
+  "id": "FEAT-001",
+  "type": "fix",
+  "description": "Backend fixes: fix provider-precedence logic in providers.py so own workspace credentials always win over use_platform_providers=True; fix SuppressionsPage.jsx REASON_OPTIONS to remove 'complaint' and 'manual'; write 8-test test_tier4e_backend.py covering provider precedence (4 tests) and suppression reason validation (4 tests). SuppressionCreate schema already has Literal['opt_out','bounce'] — no change needed there.",
+  "status": "completed",
+  "steps": [
+    "Read backend/app/services/providers.py in full before making any changes.",
+    "Fix resolve_email_providers(db, workspace) in backend/app/services/providers.py: (1) if workspace is not None, query ProviderCredential for workspace_id=workspace.id, provider IN ['brevo','smtp'], is_active=True; if any rows exist, build and return own-credential provider list (reuse existing decrypt/build logic already in the function's else-branch). (2) else if workspace is None or workspace.use_platform_providers is True, return get_platform_email_providers(). (3) else return [].",
+    "Fix resolve_sms_provider(db, workspace) with same three-step rule: (1) query own active Twilio ProviderCredential; if found, decrypt and return TwilioConfig with status_callback=f\"{settings.public_base_url}/webhooks/twilio/{workspace.webhook_token}\". (2) else if workspace is None or workspace.use_platform_providers, return get_platform_sms_provider(). (3) else return None.",
+    "Fix has_email_provider(db, workspace): (1) if workspace is not None and has active brevo/smtp ProviderCredential, return True. (2) elif workspace is None or workspace.use_platform_providers, return len(get_platform_email_providers()) > 0. (3) else return False.",
+    "Fix has_sms_provider(db, workspace): same three-step rule for Twilio.",
+    "Fix frontend/src/pages/settings/SuppressionsPage.jsx line 14: change REASON_OPTIONS = ['opt_out', 'bounce', 'complaint', 'manual'] to REASON_OPTIONS = ['opt_out', 'bounce'].",
+    "Write backend/tests/test_tier4e_backend.py following the exact structure of backend/tests/test_tier4c1.py: module-level client=TestClient(app) and settings=get_settings(); autouse reset_limiter_and_tasks fixture patching send_email_task/send_sms_task/send_webhook_task apply_async; db fixture yielding SessionLocal(); _settings_override context manager; _make_user/_create_workspace/_add_member/_auth_headers helpers; autouse ensure_encryption_key fixture setting a Fernet key.",
+    "In test_tier4e_backend.py, write test_1_own_email_creds_win_over_platform: create workspace with use_platform_providers=True, create active ProviderCredential for 'brevo' with encrypted config containing a distinctive from_email; call resolve_email_providers(db, ws); assert result is non-empty and result[0][1].from_email matches the credential's from_email, not platform settings.",
+    "Write test_2_fallback_to_platform_when_no_own_creds: create workspace with use_platform_providers=True, no ProviderCredential rows; use _settings_override to set brevo_api_key='test-key-platform' and brevo_from_email='platform@example.com'; call resolve_email_providers(db, ws); assert result[0][1].from_email == 'platform@example.com'.",
+    "Write test_3_no_creds_no_platform_fallback: create workspace with use_platform_providers=False, no ProviderCredential rows; call resolve_email_providers(db, ws); assert result == [].",
+    "Write test_4_own_sms_creds_win_over_platform: create workspace with use_platform_providers=True, create active Twilio ProviderCredential with from_number='+19995550001'; use _settings_override to set twilio_from_number='+10000000000'; call resolve_sms_provider(db, ws); assert result.from_number == '+19995550001'.",
+    "Write test_5_suppression_reason_opt_out_accepted: create user+workspace+membership; POST /suppressions with reason='opt_out'; assert status_code == 200.",
+    "Write test_6_suppression_reason_bounce_accepted: same but reason='bounce'; assert status_code == 200.",
+    "Write test_7_suppression_reason_complaint_rejected: same but reason='complaint'; assert status_code == 422.",
+    "Write test_8_suppression_reason_manual_rejected: same but reason='manual'; assert status_code == 422."
+  ],
+  "acceptance_criteria": [
+    "Running `cd backend && pytest tests/test_tier4e_backend.py -v` passes all 8 tests",
+    "Running `cd backend && pytest -q` (full suite) still passes with no regressions — especially test_workspace_uses_its_own_credentials_at_send and test_workspace_without_provider_gets_422_on_creation in test_tier4c1.py",
+    "frontend/src/pages/settings/SuppressionsPage.jsx REASON_OPTIONS contains exactly ['opt_out', 'bounce']",
+    "cd frontend && npm run build exits 0"
+  ],
+  "verification": [
+    "cd backend && pytest tests/test_tier4e_backend.py -v",
+    "cd backend && pytest tests/test_tier4c1.py -q",
+    "cd backend && pytest -q",
+    "cd frontend && npm run build"
+  ],
+  "blocked_reason": null,
+  "findings": "1. providers.py had inverted precedence logic: workspace.use_platform_providers=True caused platform providers to be used even when the workspace had its own active ProviderCredential rows. Fixed all four functions (resolve_email_providers, resolve_sms_provider, has_email_provider, has_sms_provider) to check for own credentials first (step 1), fall back to platform only if use_platform_providers is True or workspace is None (step 2), else return empty/None (step 3). 2. SuppressionCreate schema already had Literal['opt_out','bounce'] — no change needed. 3. SuppressionsPage.jsx REASON_OPTIONS reduced from 4 items to ['opt_out','bounce']. 4. All 8 new tests pass; full suite of 264 tests passes with no regressions; frontend build exits 0."
+}

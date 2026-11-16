@@ -1,0 +1,19 @@
+backup_before_tier4.sql
+backup_before_tier4b.sql
+backup_before_tier4c1.sql
+*.sql
+
+# Environment secrets — never commit
+.env
+docker-compose.override.yml
+backups/
+
+# Frontend build output
+frontend/dist/
+
+# Python cache
+backend/__pycache__/
+backend/.pytest_cache/
+
+# Logs
+*.log

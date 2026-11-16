@@ -1,75 +1,154 @@
-import { useState, useEffect, useCallback } from "react";
-import SendForm from "./components/SendForm";
-import Filters from "./components/Filters";
-import NotificationList from "./components/NotificationList";
-import { listNotifications, retryNotification } from "./api";
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { RequireAuth, useAuth } from './lib/auth';
+import Layout from './components/Layout';
+import LoginPage from './pages/LoginPage';
+import SignupPage from './pages/SignupPage';
+import VerifyEmailPage from './pages/VerifyEmailPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
+import AcceptInvitePage from './pages/AcceptInvitePage';
+import InvitationsPage from './pages/InvitationsPage';
+import LandingPage from './pages/LandingPage';
+import DocsPage from './pages/DocsPage';
+import OverviewPage from './pages/OverviewPage';
+import NotificationsPage from './pages/NotificationsPage';
+import NotificationDetailPage from './pages/NotificationDetailPage';
+import TemplatesPage from './pages/TemplatesPage';
+import SendPage from './pages/SendPage';
+import BulkPage from './pages/BulkPage';
+import NotFoundPage from './pages/NotFoundPage';
+import SettingsLayout from './pages/settings/SettingsLayout';
+import GeneralPage from './pages/settings/GeneralPage';
+import ProvidersPage from './pages/settings/ProvidersPage';
+import ApiKeysPage from './pages/settings/ApiKeysPage';
+import TeamPage from './pages/settings/TeamPage';
+import SuppressionsPage from './pages/settings/SuppressionsPage';
+import AccountPage from './pages/settings/AccountPage';
+import PlatformPage from './pages/PlatformPage';
 
-function App() {
-  const [notifications, setNotifications] = useState([]);
-  const [status, setStatus] = useState("");
-  const [channel, setChannel] = useState("");
-  const [retryingId, setRetryingId] = useState(null);
-  const [error, setError] = useState(null);
-
-  const fetchNotifications = useCallback(async () => {
-    try {
-      const data = await listNotifications({ status, channel });
-      setNotifications(data);
-      setError(null);
-    } catch (err) {
-      setError(err.message);
-    }
-  }, [status, channel]);
-
-  useEffect(() => {
-    fetchNotifications();
-  }, [fetchNotifications]);
-
-  async function handleRetry(id) {
-    setRetryingId(id);
-    try {
-      await retryNotification(id);
-      await fetchNotifications();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setRetryingId(null);
-    }
+function HomeRoute() {
+  const { user } = useAuth();
+  if (user) {
+    return (
+      <RequireAuth>
+        <Layout>
+          <OverviewPage />
+        </Layout>
+      </RequireAuth>
+    );
   }
-
-  return (
-    <div className="min-h-screen bg-gray-50 py-10 px-4">
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-1">
-            <div className="bg-blue-600 rounded-lg p-2">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
-            </div>
-            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Notification Service</h1>
-          </div>
-          <p className="text-gray-500 text-sm ml-[52px]">Send emails and SMS, track delivery status in real time</p>
-        </div>
-
-        <SendForm onSent={fetchNotifications} />
-
-        <Filters
-          status={status}
-          channel={channel}
-          onStatusChange={setStatus}
-          onChannelChange={setChannel}
-          onRefresh={fetchNotifications}
-        />
-
-        {error && (
-          <div className="bg-red-50 text-red-700 rounded-md p-3 mb-4 text-sm">{error}</div>
-        )}
-
-        <NotificationList notifications={notifications} onRetry={handleRetry} retryingId={retryingId} />
-      </div>
-    </div>
-  );
+  return <LandingPage />;
 }
 
-export default App;
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/signup" element={<SignupPage />} />
+      <Route path="/verify-email" element={<VerifyEmailPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/accept-invite" element={<AcceptInvitePage />} />
+      <Route path="/" element={<HomeRoute />} />
+      <Route path="/docs" element={<DocsPage />} />
+      <Route
+        path="/invitations"
+        element={
+          <RequireAuth>
+            <Layout>
+              <InvitationsPage />
+            </Layout>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/notifications"
+        element={
+          <RequireAuth>
+            <Layout>
+              <NotificationsPage />
+            </Layout>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/notifications/:id"
+        element={
+          <RequireAuth>
+            <Layout>
+              <NotificationDetailPage />
+            </Layout>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/templates"
+        element={
+          <RequireAuth>
+            <Layout>
+              <TemplatesPage />
+            </Layout>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/send"
+        element={
+          <RequireAuth requireWrite>
+            <Layout>
+              <SendPage />
+            </Layout>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/bulk"
+        element={
+          <RequireAuth requireWrite>
+            <Layout>
+              <BulkPage />
+            </Layout>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <RequireAuth>
+            <Layout>
+              <SettingsLayout />
+            </Layout>
+          </RequireAuth>
+        }
+      >
+        <Route index element={<Navigate to="/settings/general" replace />} />
+        <Route path="general" element={<GeneralPage />} />
+        <Route path="providers" element={<ProvidersPage />} />
+        <Route path="api-keys" element={<ApiKeysPage />} />
+        <Route path="team" element={<TeamPage />} />
+        <Route path="suppressions" element={<SuppressionsPage />} />
+        <Route path="account" element={<AccountPage />} />
+      </Route>
+      <Route
+        path="/platform"
+        element={
+          <RequireAuth>
+            <Layout>
+              <PlatformPage />
+            </Layout>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="*"
+        element={
+          <RequireAuth>
+            <Layout>
+              <NotFoundPage />
+            </Layout>
+          </RequireAuth>
+        }
+      />
+    </Routes>
+  );
+}

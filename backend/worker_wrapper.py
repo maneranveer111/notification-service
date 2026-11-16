@@ -13,18 +13,27 @@ import subprocess
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+from app.config import get_settings
+
 
 def start_celery():
-    subprocess.run(
-        [
-            "celery",
-            "-A", "app.celery_app",
-            "worker",
-            "--loglevel=info",
-            "-Q", "notification_service_queue",
-            "--pool=solo",
-        ]
-    )
+    settings = get_settings()
+    q = settings.celery_queue or "notification_service_queue"
+    queue = f"{q}_high,{q},{q}_low"
+
+    cmd = [
+        "celery",
+        "-A", "app.celery_app",
+        "worker",
+        "--loglevel=info",
+        "-Q", queue,
+        "--pool=solo",
+    ]
+
+    if os.environ.get("ENABLE_BEAT") == "true":
+        cmd.extend(["-B", "--schedule=/tmp/celerybeat-schedule"])
+
+    subprocess.run(cmd)
 
 
 class HealthHandler(BaseHTTPRequestHandler):

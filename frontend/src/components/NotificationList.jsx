@@ -1,69 +1,66 @@
-const statusColors = {
-  pending: "bg-yellow-100 text-yellow-800",
-  sent: "bg-green-100 text-green-800",
-  failed: "bg-red-100 text-red-800",
-  retrying: "bg-orange-100 text-orange-800",
-};
+import StatusBadge from './StatusBadge';
+import EmptyState from './EmptyState';
+import Button from './ui/Button';
+import { Bell } from 'lucide-react';
 
 export default function NotificationList({ notifications, onRetry, retryingId }) {
   if (notifications.length === 0) {
     return (
-      <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500">
-        No notifications yet.
-      </div>
+      <EmptyState
+        icon={Bell}
+        title="No notifications yet"
+        description="Notifications dispatched through the API or console will appear here."
+      />
     );
   }
 
   return (
-    <div className="bg-white rounded-lg shadow overflow-hidden">
+    <div className="bg-white rounded-[8px] border border-[#E7E5E4] overflow-hidden shadow-sm">
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-        <thead className="bg-gray-50 text-gray-600 text-left">
-          <tr>
-            <th className="px-4 py-3">Channel</th>
-            <th className="px-4 py-3">Recipient</th>
-            <th className="px-4 py-3">Status</th>
-            <th className="px-4 py-3">Attempts</th>
-            <th className="px-4 py-3">Created</th>
-            <th className="px-4 py-3">Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {notifications.map((n) => (
-            <tr key={n.id} className="border-t border-gray-100">
-              <td className="px-4 py-3 capitalize">{n.channel}</td>
-              <td className="px-4 py-3">{n.recipient}</td>
-              <td className="px-4 py-3">
-                <span
-                  className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    statusColors[n.status] || "bg-gray-100 text-gray-800"
-                  }`}
-                >
-                  {n.status}
-                </span>
-              </td>
-              <td className="px-4 py-3">
-                {n.attempt_count}/{n.max_attempts}
-              </td>
-              <td className="px-4 py-3 text-gray-500">
-                {new Date(n.created_at).toLocaleString()}
-              </td>
-              <td className="px-4 py-3">
-                {(n.status === "failed" || n.status === "retrying") && (
-                  <button
-                    onClick={() => onRetry(n.id)}
-                    disabled={retryingId === n.id}
-                    className="text-blue-600 hover:underline text-xs font-medium disabled:opacity-50"
-                  >
-                    {retryingId === n.id ? "Retrying..." : "Retry"}
-                  </button>
-                )}
-              </td>
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-[#F5F5F4] text-[#78716C] border-b border-[#E7E5E4]">
+              <th className="px-4 py-3 text-left font-semibold text-[11px] uppercase tracking-wider">Channel</th>
+              <th className="px-4 py-3 text-left font-semibold text-[11px] uppercase tracking-wider">Recipient</th>
+              <th className="px-4 py-3 text-left font-semibold text-[11px] uppercase tracking-wider">Status</th>
+              <th className="px-4 py-3 text-left font-semibold text-[11px] uppercase tracking-wider">Attempts</th>
+              <th className="px-4 py-3 text-left font-semibold text-[11px] uppercase tracking-wider">Created</th>
+              <th className="px-4 py-3 text-right font-semibold text-[11px] uppercase tracking-wider">Action</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody className="divide-y divide-[#E7E5E4] bg-white">
+            {notifications.map((n) => (
+              <tr key={n.id} className="hover:bg-[#FAFAF9] transition-colors">
+                <td className="px-4 py-3 capitalize text-[#1C1917] font-medium">
+                  {n.channel}
+                </td>
+                <td className="px-4 py-3 font-mono text-[11px] text-[#44403C]">{n.recipient}</td>
+                <td className="px-4 py-3">
+                  <StatusBadge status={n.status} />
+                </td>
+                <td className="px-4 py-3 text-[#78716C]">
+                  {n.attempt_count}/{n.max_attempts}
+                </td>
+                <td className="px-4 py-3 text-[#78716C]">
+                  {new Date(n.created_at).toLocaleString()}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  {(n.status === 'failed' || n.status === 'retrying') && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => onRetry(n.id)}
+                      loading={retryingId === n.id}
+                    >
+                      Retry
+                    </Button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

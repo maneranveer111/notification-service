@@ -1,244 +1,163 @@
+[![CI](https://github.com/your-org/notification-service/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/notification-service/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](docker-compose.yml)
+
 # Notification Service
 
-A full-stack notification service supporting **email** and **SMS** delivery, with a live dashboard to send notifications and track their status in real time. Built with FastAPI, Celery, and React.
-
-**Live demo:**
-- Frontend: `https://notification-service-xxxx.vercel.app`
-- API: `https://notification-service-api-oj4p.onrender.com`
-
----
-
-## Features
-
-- Queue email and SMS notifications via a REST API
-- Background processing with Celery (non-blocking sends)
-- Track notification status: `pending` → `sent` / `failed` / `retrying`
-- Manual retry for failed notifications
-- API key authentication + rate limiting
-- React dashboard: send form, live status list, filters, retry
-- Fully responsive UI
-
----
-
-## Tech Stack
-
-**Backend**
-- FastAPI (Python)
-- Celery — background task processing
-- SQLAlchemy + Alembic — ORM and migrations
-- PostgreSQL — persistent storage
-- Redis — Celery broker/result backend
-- Brevo — transactional email
-- Twilio — SMS
-- slowapi — rate limiting
-
-**Frontend**
-- React + Vite
-- Tailwind CSS v4
-
-**Infrastructure**
-- Render — API + worker hosting
-- Vercel — frontend hosting
-- Neon — managed Postgres
-- Redis Cloud — managed Redis
-
----
+Open-source, self-hostable notification infrastructure — send email, SMS, and webhooks through a single REST API with a React dashboard and multi-workspace support.
 
 ## Architecture
 
-```
-┌─────────────┐      ┌──────────────┐      ┌───────────────┐
-│   Frontend  │─────▶│   FastAPI    │─────▶│   PostgreSQL  │
-│  (Vercel)   │      │   (Render)   │      │    (Neon)     │
-└─────────────┘      └──────┬───────┘      └───────────────┘
-                             │
-                             ▼
-                      ┌──────────────┐
-                      │ Redis Cloud  │
-                      │ (task queue) │
-                      └──────┬───────┘
-                             │
-                             ▼
-                      ┌──────────────┐
-                      │ Celery Worker│
-                      │   (Render)   │
-                      └──────┬───────┘
-                             │
-                 ┌───────────┴───────────┐
-                 ▼                       ▼
-           ┌──────────┐           ┌──────────┐
-           │  Brevo   │           │  Twilio  │
-           │ (email)  │           │  (SMS)   │
-           └──────────┘           └──────────┘
+```mermaid
+graph LR
+    Client --> API["API (FastAPI)"]
+    API --> PostgreSQL
+    API --> Redis["Redis (Celery queue)"]
+    Redis --> Worker["Worker (Celery)"]
+    Worker --> Email["Email Provider"]
+    Worker --> SMS["SMS Provider"]
+    Worker --> Webhook["Webhook"]
 ```
 
-A client sends a request to the API, which persists the notification as `pending` and hands it off to Celery via Redis. The worker picks it up, calls the relevant provider (Brevo or Twilio), and updates the record's status. The frontend polls the API to reflect live status changes.
+## Quickstart
 
----
-
-## Project Structure
-
-```
-notification-service/
-├── backend/
-│   ├── alembic/              # DB migrations
-│   ├── app/
-│   │   ├── api/               # route handlers
-│   │   ├── models/             # SQLAlchemy models
-│   │   ├── schemas/            # Pydantic schemas
-│   │   ├── services/            # email_service.py, sms_service.py
-│   │   ├── tasks/               # Celery task definitions
-│   │   ├── celery_app.py
-│   │   ├── config.py
-│   │   ├── database.py
-│   │   ├── limiter.py
-│   │   ├── main.py
-│   │   └── security.py
-│   ├── worker_wrapper.py      # runs Celery as a free Render web service
-│   ├── alembic.ini
-│   └── requirements.txt
-└── frontend/
-    ├── src/
-    │   ├── components/
-    │   │   ├── SendForm.jsx
-    │   │   ├── NotificationList.jsx
-    │   │   └── Filters.jsx
-    │   ├── api.js
-    │   └── App.jsx
-    └── package.json
+```bash
+git clone https://github.com/your-org/notification-service.git
+cd notification-service
 ```
 
----
+```bash
+python scripts/generate_env.py
+```
 
-## API Endpoints
+```bash
+docker compose up -d
+```
 
-All endpoints (except `/health`) require an `X-API-Key` header.
+Visit [http://localhost](http://localhost) to open the dashboard.
 
-| Method | Endpoint | Description |
+For deploying to production with automatic TLS, domain routing, and hardened secrets, see the [Production with HTTPS Guide](docs/self-hosting.md#production-with-https).
+
+## Features
+
+- Multi-channel delivery: email (SMTP, Brevo), SMS (Twilio), webhooks
+- Per-workspace provider credentials — bring your own keys
+- Template engine with variable substitution
+- Bulk send up to 200 recipients per request
+- Scheduled notifications (up to 30 days ahead)
+- Suppression list (opt-out, bounce)
+- JWT-based user auth with workspace roles (member, admin, superadmin)
+- Rate limiting backed by Redis
+- Celery beat scheduler (optional)
+- React dashboard with live status updates
+
+## Configuration
+
+| Env Var | Default | Description |
 |---|---|---|
-| GET | `/health` | Service health check |
-| GET | `/health/db` | Database connectivity check |
-| POST | `/notifications/email` | Queue an email |
-| POST | `/notifications/sms` | Queue an SMS |
-| GET | `/notifications` | List notifications (filterable by `status`, `channel`) |
-| GET | `/notifications/{id}` | Get a single notification |
-| POST | `/notifications/{id}/retry` | Retry a failed notification |
+| `APP_NAME` | `Notification Service` | Application name shown in the UI |
+| `DEBUG` | `false` | Enable debug mode |
+| `DATABASE_URL` | — | PostgreSQL connection string (required) |
+| `REDIS_URL` | `redis://localhost:6379` | Redis URL; used for Celery broker and backend |
+| `DB_POOL_SIZE` | `5` | SQLAlchemy connection pool size |
+| `DB_MAX_OVERFLOW` | `5` | Max connections above pool size |
+| `DB_POOL_TIMEOUT` | `30` | Seconds to wait for a connection |
+| `DB_POOL_RECYCLE` | `1800` | Recycle connections after this many seconds |
+| `CELERY_QUEUE` | `notification_service_queue` | Celery queue name |
+| `PUBLIC_BASE_URL` | `http://localhost:8001` | Public-facing API base URL (used in webhook callbacks) |
+| `WEBHOOK_SECRET` | — | HMAC secret for signing outgoing webhook payloads |
+| `WEBHOOK_VERIFY` | `true` | Verify TLS certs when delivering webhooks |
+| `EMAIL_PROVIDER_ORDER` | `brevo,smtp` | Comma-separated provider preference order |
+| `SMTP_HOST` | — | SMTP server hostname |
+| `SMTP_USER` | — | SMTP authentication username |
+| `SMTP_PASSWORD` | — | SMTP authentication password |
+| `SMTP_FROM_EMAIL` | — | Default sender address for SMTP |
+| `SMTP_PORT` | `587` | SMTP port |
+| `SMTP_USE_TLS` | `true` | Enable STARTTLS |
+| `BREVO_API_KEY` | — | Brevo (Sendinblue) API key |
+| `BREVO_FROM_EMAIL` | — | Default sender address for Brevo |
+| `TWILIO_ACCOUNT_SID` | — | Twilio account SID |
+| `TWILIO_AUTH_TOKEN` | — | Twilio auth token |
+| `TWILIO_FROM_NUMBER` | — | Twilio sender phone number |
+| `API_KEY` | — | Master API key for the default workspace (required) |
+| `JWT_SECRET` | — | Secret for signing JWT tokens (required) |
+| `JWT_EXPIRE_MINUTES` | `480` | JWT token lifetime in minutes |
+| `METRICS_TOKEN` | — | Bearer token for the `/metrics` endpoint |
+| `LOG_FORMAT` | `text` | Log format: `text` or `json` |
+| `FRONTEND_URL` | `http://localhost:5173` | Allowed CORS origins (comma-separated) |
+| `SCHEDULE_MAX_DAYS` | `30` | Maximum days ahead a notification can be scheduled |
+| `BULK_MAX_RECIPIENTS` | `200` | Maximum recipients per bulk send request |
+| `MAX_WORKSPACES_PER_USER` | `5` | Maximum workspaces a single user can own |
+| `UNSUBSCRIBE_SECRET` | — | HMAC secret for one-click unsubscribe links |
+| `WEBHOOK_CHANNEL_ALLOWED_HOSTS` | `hooks.slack.com,discord.com,discordapp.com` | Allowed outbound webhook hosts |
+| `SIGNUP_MODE` | `open` | Registration mode: `open`, `invite_only`, or `closed` |
+| `REQUIRE_EMAIL_VERIFICATION` | `true` | Require email verification on signup |
+| `SYSTEM_MAIL_BACKEND` | `provider` | System mail backend: `provider` or `console` |
+| `FRONTEND_PUBLIC_URL` | `http://localhost:5173` | Public frontend URL (used in system emails) |
+| `ENCRYPTION_KEY` | — | Fernet key(s) for encrypting provider credentials |
+| `ALLOW_PRIVATE_SMTP_HOSTS` | `false` | Allow SMTP relay to private/internal hostnames |
+| `TRUSTED_PROXY_COUNT` | `0` | Number of trusted reverse proxies (for real IP detection) |
+| `RATE_LIMIT_STORAGE_URI` | — | Redis URI for rate limit counters (defaults to REDIS_URL) |
+| `QUOTA_ENABLED` | `true` | Enable per-workspace sending quotas |
+| `TURNSTILE_SECRET_KEY` | — | Cloudflare Turnstile secret key |
+| `TURNSTILE_SITE_KEY` | — | Cloudflare Turnstile site key |
 
----
+## API Quick Reference
 
-## Local Development
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/health` | Service health check |
+| `POST` | `/auth/register` | Register a new user |
+| `POST` | `/auth/login` | Obtain a JWT token |
+| `GET` | `/workspaces` | List workspaces for current user |
+| `POST` | `/workspaces` | Create a new workspace |
+| `POST` | `/notifications/email` | Queue an email notification |
+| `POST` | `/notifications/sms` | Queue an SMS notification |
+| `POST` | `/notifications/webhook` | Queue a webhook notification |
+| `GET` | `/notifications` | List notifications |
+| `GET` | `/notifications/{id}` | Get a single notification |
+| `POST` | `/notifications/{id}/retry` | Retry a failed notification |
+| `POST` | `/notifications/bulk` | Bulk send to multiple recipients |
+| `GET` | `/templates` | List templates |
+| `POST` | `/templates` | Create a template |
+| `GET` | `/suppressions` | List suppression entries |
+| `POST` | `/suppressions` | Add a suppression entry |
+| `DELETE` | `/suppressions/{id}` | Remove a suppression entry |
 
-### Prerequisites
-- Python 3.13+
-- Node.js
-- A PostgreSQL instance (local or hosted)
-- A Redis instance (local or hosted)
-- Brevo account (free tier) for email
-- Twilio account (trial or paid) for SMS
+## Development
 
 ### Backend
 
 ```bash
 cd backend
 python -m venv venv
-source venv/Scripts/activate   # Windows Git Bash
-# venv\Scripts\activate        # Windows PowerShell
-# source venv/bin/activate     # macOS/Linux
+source venv/bin/activate   # macOS/Linux
+# venv\Scripts\activate    # Windows
 
 pip install -r requirements.txt
-cp .env.example .env           # fill in your own values
+cp .env.example .env       # edit with your values
 alembic upgrade head
 
-# Terminal 1
-python -m uvicorn app.main:app --reload --port 8001
+# Terminal 1 — API
+uvicorn app.main:app --reload --port 8000
 
-# Terminal 2
+# Terminal 2 — Worker
 celery -A app.celery_app worker --loglevel=info -Q notification_service_queue --pool=solo
 ```
-
-> `--pool=solo` is required on Windows (Celery's default prefork pool doesn't work reliably there). On Linux/macOS, prefork works fine and this flag can be dropped.
 
 ### Frontend
 
 ```bash
 cd frontend
-npm install
-cp .env.example .env           # point VITE_API_BASE_URL at your backend
+npm ci
+cp .env.example .env       # set VITE_API_BASE_URL=http://localhost:8000
 npm run dev
 ```
 
----
+## Contributing
 
-## Environment Variables
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on setting up a development environment, running tests, and submitting pull requests.
 
-### Backend (`backend/.env`)
+## License
 
-```
-DATABASE_URL=postgresql://user:pass@host:port/dbname
-REDIS_URL=redis://default:pass@host:port
-
-BREVO_API_KEY=
-BREVO_FROM_EMAIL=
-
-TWILIO_ACCOUNT_SID=
-TWILIO_AUTH_TOKEN=
-TWILIO_FROM_NUMBER=
-
-API_KEY=
-APP_NAME=Notification Service
-DEBUG=False
-FRONTEND_URL=http://localhost:5173
-```
-
-### Frontend (`frontend/.env`)
-
-```
-VITE_API_BASE_URL=http://localhost:8001
-VITE_API_KEY=
-```
-
----
-
-## Deployment
-
-### Backend — Render
-
-Two services are deployed from the same repo, both with **Root Directory** set to `backend`:
-
-**1. API (Web Service)**
-- Build: `pip install -r requirements.txt`
-- Start: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-
-**2. Worker**
-Render's free tier does not include Background Worker services — only Web Services. To run Celery for free, the worker is deployed as a **Web Service** running `worker_wrapper.py`, which starts the real Celery worker in a background thread and binds a minimal dummy HTTP server to `$PORT` just to satisfy Render's health check.
-- Build: `pip install -r requirements.txt`
-- Start: `python worker_wrapper.py`
-
-Both services share the same environment variables. `celery`'s pool is set to `--pool=solo` in the wrapper — the default `prefork` pool spawns multiple processes and exceeds the 512MB RAM limit on Render's free instance, causing an OOM crash loop.
-
-### Frontend — Vercel
-- Root Directory: `frontend`
-- Framework: Vite (auto-detected)
-- Env vars: `VITE_API_BASE_URL` (pointing to the Render API URL), `VITE_API_KEY`
-
-After deploying the frontend, update `FRONTEND_URL` on the Render API service to the Vercel URL so CORS allows requests from it.
-
----
-
-## Known Limitations
-
-- **Twilio (SMS):** Running on a trial account, which can only send to phone numbers manually verified in the Twilio console. A paid account removes this restriction.
-- **Free-tier cold starts:** Both Render services (API and worker) spin down after ~15 minutes of inactivity. The first request after idling can take 30–50 seconds to respond. *(Workaround planned/in progress.)*
-- **Email deliverability:** The sender address is a personal Gmail account rather than an authenticated custom domain, so some emails may land in spam depending on the recipient's provider.
-- **API key exposure:** The `X-API-Key` header is sent from the browser, so it's visible in the network tab. This is acceptable for a demo/portfolio project but isn't a substitute for real user authentication in a production system.
-- **Neon (Postgres) / Redis Cloud:** Both are on generous free tiers but may have connection idling behavior (auto-sleep/reconnect) under very low traffic.
-
----
-
-## Possible Future Improvements
-
-- Replace API-key auth with proper user accounts (JWT-based)
-- Add webhook support for delivery status callbacks from Brevo/Twilio
-- Add pagination controls to the frontend list
-- Domain-authenticated sender for better email deliverability
-- Upgrade Twilio to remove the verified-number restriction
+[MIT](LICENSE) — Copyright (c) 2025 Notification Service Contributors

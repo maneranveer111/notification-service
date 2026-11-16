@@ -1,11 +1,13 @@
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 from app.main import app
+from app.config import get_settings
 
 client = TestClient(app)
+settings = get_settings()
 
-# Our valid API key (same as in .env)
-API_KEY = "notifications-services-secret-key-2026"
+# Valid master API key from active configuration
+API_KEY = settings.api_key
 HEADERS = {"X-API-Key": API_KEY}
 
 

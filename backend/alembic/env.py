@@ -13,9 +13,11 @@ from alembic import context
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
+import os
 from app.config import get_settings
 settings = get_settings()
-config.set_main_option("sqlalchemy.url", settings.database_url)
+db_url = os.environ.get("TEST_DATABASE_URL") or os.environ.get("ALEMBIC_DB_URL") or os.environ.get("DATABASE_URL") or settings.database_url
+config.set_main_option("sqlalchemy.url", db_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -29,6 +31,15 @@ if config.config_file_name is not None:
 
 from app.database import Base
 from app.models.notification import Notification  # important: ensures model is imported
+from app.models.delivery_event import DeliveryEvent
+from app.models.api_client import ApiClient
+from app.models.template import Template
+from app.models.suppression import Suppression
+from app.models.user import User
+from app.models.delivery_attempt import DeliveryAttempt
+from app.models.workspace import Workspace, Membership
+from app.models.invitation import Invitation
+from app.models.provider_credential import ProviderCredential
 
 target_metadata = Base.metadata
 

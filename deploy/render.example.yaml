@@ -1,0 +1,92 @@
+# Example Render Blueprint for Notification Service
+# NOTE: This file is an example and should be copied/adapted as needed.
+# It defines two Web Services on the free plan: one for the FastAPI REST API,
+# and one running worker_wrapper.py (which binds to $PORT to satisfy Render's free tier).
+
+services:
+  - type: web
+    name: notification-service-api
+    env: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: API_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: WEBHOOK_SECRET
+        sync: false
+      - key: UNSUBSCRIBE_SECRET
+        sync: false
+      - key: METRICS_TOKEN
+        sync: false
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: FRONTEND_PUBLIC_URL
+        sync: false
+      - key: TRUSTED_PROXY_COUNT
+        value: "1"
+      - key: RATE_LIMIT_STORAGE_URI
+        sync: false
+      - key: SIGNUP_MODE
+        value: invite_only
+      - key: REQUIRE_EMAIL_VERIFICATION
+        value: "true"
+      - key: SYSTEM_MAIL_BACKEND
+        value: provider
+      - key: LOG_FORMAT
+        value: json
+      - key: QUOTA_ENABLED
+        value: "true"
+
+  - type: web
+    name: notification-service-worker
+    env: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python worker_wrapper.py
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: ENABLE_BEAT
+        value: "true"
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: API_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: WEBHOOK_SECRET
+        sync: false
+      - key: UNSUBSCRIBE_SECRET
+        sync: false
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: FRONTEND_PUBLIC_URL
+        sync: false
+      - key: SIGNUP_MODE
+        value: invite_only
+      - key: REQUIRE_EMAIL_VERIFICATION
+        value: "true"
+      - key: SYSTEM_MAIL_BACKEND
+        value: provider
+      - key: LOG_FORMAT
+        value: json

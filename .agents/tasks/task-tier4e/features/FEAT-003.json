@@ -1,0 +1,37 @@
+{
+  "id": "FEAT-003",
+  "type": "feat",
+  "description": "Docker packaging: backend/Dockerfile (python:3.11-slim, non-root user app, no CMD), backend/.dockerignore, frontend/Dockerfile (multi-stage node:20-alpine build + nginx:alpine serve), frontend/nginx.conf (SPA fallback, /api/ proxy, gzip, cache headers, security headers, no-cache for config.js), frontend/docker-entrypoint.d/10-config.sh (writes config.js from API_BASE_URL env), frontend/.dockerignore, docker-compose.yml at repo root (db/redis/migrate/api/worker/web services using REDIS_URL for Celery broker+backend), root .env.example with all settings, scripts/generate_env.py (stdlib only), .gitignore additions. Depends on FEAT-002 (absoluteApiBase) being present but does not need FEAT-001.",
+  "status": "completed",
+  "steps": [
+    "Create backend/Dockerfile: FROM python:3.11-slim; RUN useradd -m -u 1000 app; WORKDIR /app; COPY requirements.txt .; RUN pip install --no-cache-dir -r requirements.txt; COPY . .; USER app. No CMD or ENTRYPOINT — command is set per-service in docker-compose.yml.",
+    "Create backend/.dockerignore: __pycache__/, *.pyc, *.pyo, .env, .env.*, venv/, .venv/, tests/, *.sql, .pytest_cache/",
+    "Create frontend/nginx.conf with: server { listen 80; root /usr/share/nginx/html; gzip on; gzip_types text/plain application/javascript application/json text/css image/svg+xml; add_header X-Frame-Options SAMEORIGIN; add_header X-Content-Type-Options nosniff; add_header Referrer-Policy strict-origin-when-cross-origin; location /api/ { proxy_pass http://api:8000/; proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; } location = /config.js { expires off; add_header Cache-Control no-store; } location ~* \\.(js|css|png|svg|ico|woff2)$ { expires 1y; add_header Cache-Control \"public, immutable\"; } location / { try_files $uri $uri/ /index.html; } }",
+    "Create frontend/docker-entrypoint.d/10-config.sh: #!/bin/sh\\ncat > /usr/share/nginx/html/config.js <<EOF\\nwindow.__APP_CONFIG__ = {\\n  API_BASE_URL: \"${API_BASE_URL:-}\"\\n};\\nEOF. The file must have Unix line endings (LF only).",
+    "Create frontend/Dockerfile: stage 1 builder FROM node:20-alpine AS builder; WORKDIR /app; COPY package*.json .; RUN npm ci; COPY . .; ARG VITE_API_BASE_URL; RUN npm run build. Stage 2 runner FROM nginx:alpine; COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf; COPY --from=builder /app/dist /usr/share/nginx/html; COPY frontend/docker-entrypoint.d/10-config.sh /docker-entrypoint.d/10-config.sh; RUN chmod +x /docker-entrypoint.d/10-config.sh; EXPOSE 80. Note: the Dockerfile is at frontend/Dockerfile so nginx.conf path inside the build context is ./nginx.conf not frontend/nginx.conf.",
+    "Create frontend/.dockerignore: node_modules/, dist/, .env, .env.*, *.log",
+    "Create docker-compose.yml at the repo root with these services: (a) db: image postgres:16, env POSTGRES_DB/POSTGRES_USER/POSTGRES_PASSWORD, volume pgdata:/var/lib/postgresql/data, healthcheck using pg_isready. (b) redis: image redis:7-alpine, healthcheck redis-cli ping. (c) migrate: build context ./backend, command 'alembic upgrade head', depends_on db (service_healthy), env_file .env, restart on-failure. (d) api: build context ./backend, command 'uvicorn app.main:app --host 0.0.0.0 --port 8000', depends_on migrate (service_completed_successfully) and redis (service_healthy), env_file .env, ports 8000:8000. (e) worker: build context ./backend, command 'python worker_wrapper.py', same depends_on as api, env_file .env, env ENABLE_BEAT=false. (f) web: build {context: ./frontend, args: {VITE_API_BASE_URL: /api}}, depends_on [api], environment API_BASE_URL=/api, ports 80:80. Volumes section: pgdata:",
+    "Create root .env.example. Copy all variables from backend/.env.example as the base. Then add at the top: # Docker Compose service variables\\nPOSTGRES_DB=notification_db\\nPOSTGRES_USER=postgres\\nPOSTGRES_PASSWORD=changeme\\n# Frontend build and runtime\\nVITE_API_BASE_URL=http://localhost:8000\\nAPI_BASE_URL=http://localhost:8000\\n# Worker\\nENABLE_BEAT=false. Remove duplicate lines (backend/.env.example has SIGNUP_MODE, REQUIRE_EMAIL_VERIFICATION, SYSTEM_MAIL_BACKEND, FRONTEND_PUBLIC_URL duplicated — keep only one copy of each). Do NOT add CELERY_BROKER_URL or CELERY_RESULT_BACKEND — celery_app.py does not read them.",
+    "Create scripts/generate_env.py using Python stdlib only. Logic: (1) read .env.example line by line; (2) for each KEY=VALUE line, if KEY matches SECRET|KEY|TOKEN|PASSWORD|SALT (case-insensitive) and VALUE is empty or a placeholder (contains 'replace', 'your-', 'changeme', 'xxxxxx', 'placeholder'), generate a new value; (3) for ENCRYPTION_KEY specifically, generate base64.urlsafe_b64encode(secrets.token_bytes(32)).decode(); (4) for all other secret keys, use secrets.token_urlsafe(32); (5) write .env; (6) if .env already exists, print a warning and exit without overwriting. Add a __main__ guard.",
+    "Update root .gitignore: append lines: .env, docker-compose.override.yml, frontend/dist/, backend/__pycache__/, backend/.pytest_cache/, *.log (check what is already there first — currently only *.sql and backup_before_*.sql lines exist)."
+  ],
+  "acceptance_criteria": [
+    "backend/Dockerfile exists and has no CMD instruction",
+    "frontend/Dockerfile exists as a multi-stage build",
+    "frontend/nginx.conf has SPA fallback (try_files), /api/ proxy_pass, and no-cache for config.js",
+    "frontend/docker-entrypoint.d/10-config.sh is executable and writes config.js",
+    "docker-compose.yml exists with all 6 services (db, redis, migrate, api, worker, web)",
+    "docker compose config --quiet exits 0",
+    "Root .env.example contains DATABASE_URL, REDIS_URL, API_KEY, JWT_SECRET, POSTGRES_DB, API_BASE_URL",
+    "scripts/generate_env.py runs without errors and creates .env with non-empty secret values",
+    ".gitignore contains .env entry"
+  ],
+  "verification": [
+    "docker compose config --quiet",
+    "docker compose build api",
+    "docker compose build web",
+    "python scripts/generate_env.py && grep -c '.' .env"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
