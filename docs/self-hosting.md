@@ -50,6 +50,28 @@ Visit [http://localhost](http://localhost). On first launch, register an account
 | `worker` | `./backend` | Celery worker that processes notification tasks |
 | `web` | `./frontend` | Nginx serving the React SPA and proxying `/api/` to the API |
 
+## Troubleshooting: containers stuck in Created or Waiting
+
+When launching the stack, services such as `api`, `worker`, and `web` depend on `migrate` to complete successfully (`service_completed_successfully`). If `migrate` is blocked or waiting, dependent services will remain in `Created` or `Waiting` status.
+
+Use the deterministic startup helper to diagnose and launch the stack:
+
+```bash
+python scripts/up.py
+```
+
+### Reading `up.py` Output & Migration Exit Codes
+
+If startup fails, `scripts/up.py` captures container logs and inspects the database to report one of three diagnostic codes:
+- **Code 2 (Database Unreachable):** The migration runner could not reach the database within 60 seconds. Verify that the `db` container is running and healthy.
+- **Code 3 (Lock Timeout or Migration Error):** A database statement timed out after 30 seconds due to conflicting locks or a migration failure. Check the printed active sessions and blocking PIDs. For a disposable local development database, run `python scripts/up.py --fresh` to reset volumes and clear locks.
+- **Code 4 (Migration Watchdog Timeout):** Migration execution hung for more than 240 seconds and was terminated by the watchdog timer. Inspect long-running transactions.
+
+To completely reset the local database and rebuild containers from scratch:
+```bash
+python scripts/up.py --fresh --build
+```
+
 ## Running Migrations Manually
 
 If you need to run migrations outside the normal startup flow:
