@@ -119,7 +119,7 @@ def test_urls_error_and_localhost_allowance():
 
     # Localhost/127.0.0.1 can use http without error
     s3 = _make_valid_prod_settings(
-        public_base_url="http://localhost:8000",
+        public_base_url="http://localhost:8001",
         frontend_public_url="http://127.0.0.1:3000",
     )
     errors3, _ = check_production_settings(s3)

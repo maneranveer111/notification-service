@@ -24,7 +24,7 @@ POST /notifications/email or /sms
 ▼
 ┌─────────────────┐
 │ FastAPI │ → validates input → saves to PostgreSQL (status=pending)
-│ (Port 8000) │ → queues job in Redis → responds instantly
+│ (Port 8001) │ → queues job in Redis → responds instantly
 └─────────────────┘
 │
 ▼
@@ -281,7 +281,7 @@ pytest -v
 
 Interactive API Docs
 FastAPI provides automatic interactive documentation:
-http://127.0.0.1:8000/docs
+http://127.0.0.1:8001/docs
 
 
 Environment     Variables

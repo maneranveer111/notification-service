@@ -108,7 +108,7 @@ def check_ports(env_keys: dict[str, str]):
     https_port = int(env_keys.get("HTTPS_PORT", 443))
 
     ports_to_check = [
-        (8000, "API dev default"),
+        (8000, "API dev default"),  # allow-8000
         (8001, "API alt / test default"),
         (5173, "Vite frontend dev default"),
         (web_port, f"WEB_PORT ({web_port})"),
@@ -118,9 +118,9 @@ def check_ports(env_keys: dict[str, str]):
 
     for port, label in ports_to_check:
         open_status = is_port_open(port)
-        if port in (8000, 5173) and open_status:
+        if port in (8000, 5173) and open_status:  # allow-8000
             print(f"[WARN] Port {port} ({label}): accepting connections.")
-            print("       Fix: A listener on 8000 or 5173 is probably an old local dev process. Terminate it if using Docker.")
+            print("       Fix: A listener on 8000 or 5173 is probably an old local dev process. Terminate it if using Docker.")  # allow-8000
         elif open_status:
             print(f"[OK]   Port {port} ({label}): accepting connections.")
         else:

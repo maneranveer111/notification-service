@@ -139,7 +139,7 @@ cp .env.example .env       # edit with your values
 alembic upgrade head
 
 # Terminal 1 — API
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8001
 
 # Terminal 2 — Worker
 celery -A app.celery_app worker --loglevel=info -Q notification_service_queue --pool=solo
@@ -150,7 +150,7 @@ celery -A app.celery_app worker --loglevel=info -Q notification_service_queue --
 ```bash
 cd frontend
 npm ci
-cp .env.example .env       # set VITE_API_BASE_URL=http://localhost:8000
+cp .env.example .env       # set VITE_API_BASE_URL=http://localhost:8001
 npm run dev
 ```
 

@@ -1,5 +1,7 @@
 # Self-Hosting Guide
 
+> **Port note:** The API listens on **8001** inside its container. Only the web server (nginx, and in production only Caddy) is exposed externally. Changing the API port requires updating it in three places together: the compose `api` command (`--port 8001`), the health check URL (`http://localhost:8001/health`), and `frontend/nginx.conf` (`proxy_pass http://api:8001/`).
+
 ## Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) 24 or later

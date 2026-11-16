@@ -3,7 +3,7 @@
 // can be overridden at deploy time without rebuilding the bundle.
 // ---------------------------------------------------------------------------
 export function absoluteApiBase() {
-  return (window.__APP_CONFIG__?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '');
+  return (window.__APP_CONFIG__?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001').replace(/\/$/, '');
 }
 
 function _base() { return absoluteApiBase(); }

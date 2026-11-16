@@ -112,7 +112,7 @@ def test_complete_platform_journey():
              signup_mode="invite_only",
              require_email_verification=True,
              unsubscribe_secret="test-unsubscribe-secret-at-least-32-chars-long",
-             public_base_url="http://localhost:8000",
+             public_base_url="http://localhost:8001",
              quota_enabled=True,
          ):
 

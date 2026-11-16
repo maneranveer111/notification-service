@@ -1,7 +1,0 @@
-{
-  "task_id": "task-tier4e",
-  "task_description": "Tier 4 Part E: backend provider-precedence fix + suppression form fix + backend tests, frontend runtime config (absoluteApiBase / config.js), Docker packaging (Dockerfiles, nginx, docker-compose, env), landing page + docs page + App routing, OSS files (README, LICENSE, CONTRIBUTING, SECURITY, issue templates), CI docker job",
-  "status": "pending",
-  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003", "FEAT-004", "FEAT-005"],
-  "blocked_reason": null
-}

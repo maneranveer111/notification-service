@@ -57,7 +57,7 @@
 **Option 1 — Uvicorn workers (single container):**
 
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+uvicorn app.main:app --host 0.0.0.0 --port 8001 --workers 4
 ```
 
 **Option 2 — Multiple container replicas (docker-compose.override.yml):**
