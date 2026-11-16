@@ -34,7 +34,7 @@ services:
   api:
     build:
       context: ./backend
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001
     env_file: .env
     depends_on:
       migrate:
@@ -42,7 +42,7 @@ services:
       redis:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      - "8001:8001"
 
   worker:
     build:
