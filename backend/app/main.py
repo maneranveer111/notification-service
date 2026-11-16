@@ -1,12 +1,14 @@
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
+import hmac
 import json
 import logging
+import os
 import sys
 import time
-from uuid import uuid4
+from uuid import UUID, uuid4
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
@@ -31,7 +33,9 @@ from app.api.workspaces import router as workspaces_router
 from app.config import get_settings
 from app.database import get_db
 from app.limiter import limiter, rate_limit_exceeded_handler
+from app.models.user import User
 from app.security import ClientRateLimitExceeded
+from app.services.jwt_tokens import decode_access_token
 from app.services.quota import QuotaExceeded
 from app.services.startup_checks import validate_production_or_raise
 
@@ -176,3 +180,81 @@ def health():
 def health_db(db: Session = Depends(get_db)):
     version = db.execute(text("SELECT version();")).scalar()
     return {"status": "ok", "db": "connected", "version": version}
+
+
+def verify_deep_health_access(request: Request, db: Session = Depends(get_db)):
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+        if settings.metrics_token and hmac.compare_digest(token, settings.metrics_token):
+            return True
+        try:
+            payload = decode_access_token(token)
+            user_id = UUID(payload.get("sub"))
+            user = db.get(User, user_id)
+            if not user or not user.is_active:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+            if not user.is_superadmin:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Superadmin access required.")
+            return True
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+
+    api_key = request.headers.get("X-API-Key")
+    if api_key and settings.api_key and hmac.compare_digest(api_key, settings.api_key):
+        return True
+
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+
+
+@app.get("/health/deep")
+def health_deep(
+    request: Request,
+    db: Session = Depends(get_db),
+    _auth=Depends(verify_deep_health_access),
+):
+    try:
+        db.execute(text("SELECT 1;")).scalar()
+        db_status = "ok"
+    except Exception:
+        db_status = "error"
+
+    redis_status = "error"
+    queues = {}
+    q_names = [
+        settings.celery_queue,
+        f"{settings.celery_queue}_high",
+        f"{settings.celery_queue}_low",
+    ]
+    try:
+        from app.services.rate_limit import get_redis_client
+        r = get_redis_client()
+        if r.ping():
+            redis_status = "ok"
+            for q in q_names:
+                try:
+                    queues[q] = r.llen(q)
+                except Exception:
+                    queues[q] = 0
+    except Exception:
+        redis_status = "error"
+        for q in q_names:
+            queues[q] = 0
+
+    try:
+        from app.celery_app import celery
+        res = celery.control.inspect(timeout=1).ping()
+        worker_status = "ok" if res else "none"
+    except Exception:
+        worker_status = "none"
+
+    return {
+        "db": db_status,
+        "redis": redis_status,
+        "worker": worker_status,
+        "queues": queues,
+        "environment": settings.environment,
+        "version": os.environ.get("APP_VERSION", "dev"),
+    }

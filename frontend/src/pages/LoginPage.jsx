@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
-import { getPublicConfig, apiFetch, ApiError } from '../lib/api';
+import { getPublicConfig, apiFetch, ApiError, absoluteApiBase } from '../lib/api';
+import { canShowSignupLink, signupMessage } from '../lib/signupRules';
 import { describeError } from '../lib/errors';
 import PasswordInput from '../components/PasswordInput';
 import Captcha from '../components/Captcha';
@@ -196,6 +197,11 @@ export default function LoginPage() {
             </button>
           </div>
         </div>
+        {searchParams.get('debug') === '1' && (
+          <div className="mt-4 text-center text-[11px] text-[#A8A29E]">
+            server: {config?.environment || 'unknown'} · v{config?.version || 'dev'} · API {absoluteApiBase()}
+          </div>
+        )}
       </div>
     );
   }
@@ -253,7 +259,7 @@ export default function LoginPage() {
         </form>
 
         <div className="mt-6 pt-5 border-t border-[#E7E5E4] text-center text-xs text-[#78716C]">
-          {config?.signup_mode === 'open' || config?.needs_setup ? (
+          {canShowSignupLink(config) ? (
             <>
               Don&apos;t have an account?{' '}
               <Link to="/signup" className="text-[#4F46E5] hover:text-[#4338CA] font-medium transition-colors">
@@ -261,10 +267,15 @@ export default function LoginPage() {
               </Link>
             </>
           ) : (
-            'Accounts are created by invitation.'
+            signupMessage(config) || 'Accounts are created by invitation.'
           )}
         </div>
       </div>
+      {searchParams.get('debug') === '1' && (
+        <div className="mt-4 text-center text-[11px] text-[#A8A29E]">
+          server: {config?.environment || 'unknown'} · v{config?.version || 'dev'} · API {absoluteApiBase()}
+        </div>
+      )}
     </div>
   );
 }

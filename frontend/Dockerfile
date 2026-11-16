@@ -10,5 +10,5 @@ FROM nginx:alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY docker-entrypoint.d/10-config.sh /docker-entrypoint.d/10-config.sh
-RUN chmod +x /docker-entrypoint.d/10-config.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.d/10-config.sh && chmod +x /docker-entrypoint.d/10-config.sh
 EXPOSE 80

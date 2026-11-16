@@ -1,10 +1,49 @@
+# Commands:
+#   Start: docker compose up -d
+#   Stop:  docker compose down --remove-orphans
+#   Reset: docker compose down -v
+
+name: notification-dev
+
+x-backend-env: &backend-env
+  ENVIRONMENT: ${ENVIRONMENT:-development}
+  DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-notification_db}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+  API_KEY: ${API_KEY:?API_KEY is required}
+  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+  ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+  UNSUBSCRIBE_SECRET: ${UNSUBSCRIBE_SECRET:?UNSUBSCRIBE_SECRET is required}
+  PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8001}
+  FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173,http://localhost:3000}
+  FRONTEND_PUBLIC_URL: ${FRONTEND_PUBLIC_URL:-http://localhost:5173}
+  CELERY_QUEUE: ${CELERY_QUEUE:-notification_service_queue}
+  APP_NAME: ${APP_NAME:-Notification Service}
+  SIGNUP_MODE: ${SIGNUP_MODE:-open}
+  REQUIRE_EMAIL_VERIFICATION: ${REQUIRE_EMAIL_VERIFICATION:-True}
+  SYSTEM_MAIL_BACKEND: ${SYSTEM_MAIL_BACKEND:-provider}
+  EMAIL_PROVIDER_ORDER: ${EMAIL_PROVIDER_ORDER:-brevo,smtp}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_USE_TLS: ${SMTP_USE_TLS:-True}
+  BREVO_API_KEY: ${BREVO_API_KEY:-}
+  BREVO_FROM_EMAIL: ${BREVO_FROM_EMAIL:-}
+  BREVO_FROM_NAME: ${BREVO_FROM_NAME:-}
+  TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+  TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+  TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}
+  METRICS_TOKEN: ${METRICS_TOKEN:-}
+  LOG_FORMAT: ${LOG_FORMAT:-text}
+
 services:
   db:
     image: postgres:16
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-notification_db}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -24,8 +63,11 @@ services:
   migrate:
     build:
       context: ./backend
+      args:
+        GIT_SHA: ${GIT_SHA:-dev}
     command: alembic upgrade head
-    env_file: .env
+    environment:
+      <<: *backend-env
     depends_on:
       db:
         condition: service_healthy
@@ -34,28 +76,44 @@ services:
   api:
     build:
       context: ./backend
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8001
-    env_file: .env
+      args:
+        GIT_SHA: ${GIT_SHA:-dev}
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    environment:
+      <<: *backend-env
     depends_on:
       migrate:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
-    ports:
-      - "8001:8001"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\")'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+#   ports:
+#     - "${API_HOST_PORT:-8001}:8000"
 
   worker:
     build:
       context: ./backend
-    command: python worker_wrapper.py
-    env_file: .env
+      args:
+        GIT_SHA: ${GIT_SHA:-dev}
+    command: celery -A app.celery_app worker -B -l info -Q ${CELERY_QUEUE:-notification_service_queue},${CELERY_QUEUE:-notification_service_queue}_high,${CELERY_QUEUE:-notification_service_queue}_low
     environment:
-      ENABLE_BEAT: "false"
+      <<: *backend-env
     depends_on:
       migrate:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.celery_app inspect ping --timeout 5"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   web:
     build:
@@ -65,9 +123,10 @@ services:
     environment:
       API_BASE_URL: /api
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     ports:
-      - "80:80"
+      - "${WEB_PORT:-8080}:80"
 
 volumes:
   pgdata:

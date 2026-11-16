@@ -1,3 +1,4 @@
+import os
 from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -25,4 +26,6 @@ def get_public_config(request: Request, response: Response, db: Session = Depend
         "require_email_verification": settings.require_email_verification,
         "turnstile_site_key": settings.turnstile_site_key,
         "needs_setup": needs_setup,
+        "environment": settings.environment,
+        "version": os.environ.get("APP_VERSION", "dev"),
     }

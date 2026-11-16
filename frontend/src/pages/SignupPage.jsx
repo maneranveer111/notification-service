@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { getPublicConfig, apiFetch, ApiError } from '../lib/api';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { getPublicConfig, apiFetch, ApiError, absoluteApiBase } from '../lib/api';
+import { signupState, showWorkspaceName, signupMessage } from '../lib/signupRules';
 import { useAuth } from '../lib/auth';
 import { describeError } from '../lib/errors';
 import PasswordInput from '../components/PasswordInput';
@@ -12,6 +13,7 @@ import { AlertCircle, Mail } from 'lucide-react';
 export default function SignupPage() {
   const { loginWithResponse } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [config, setConfig] = useState(null);
   const [configLoading, setConfigLoading] = useState(true);
@@ -63,7 +65,7 @@ export default function SignupPage() {
       const body = {
         email,
         password,
-        workspace_name: config?.needs_setup ? undefined : workspaceName || undefined,
+        workspace_name: showWorkspaceName(config) ? workspaceName || undefined : undefined,
         captcha_token: captchaToken || undefined,
       };
       const { data, response } = await apiFetch('/auth/signup', {
@@ -118,7 +120,9 @@ export default function SignupPage() {
     );
   }
 
-  if (config?.signup_mode === 'closed' && !config?.needs_setup) {
+  const state = signupState(config);
+
+  if (state === 'closed') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#FAFAF9] px-4 py-12">
         <div className="w-full max-w-[400px] bg-white rounded-[10px] border border-[#E7E5E4] shadow-sm p-8 text-center">
@@ -127,17 +131,22 @@ export default function SignupPage() {
           </div>
           <h1 className="text-lg font-bold tracking-tight text-[#1C1917] mb-2">Sign-ups Closed</h1>
           <p className="text-xs text-[#78716C] mb-6">
-            Sign-ups are currently closed for new users.
+            {signupMessage(config)}
           </p>
           <Link to="/login" className="text-xs font-medium text-[#4F46E5] hover:text-[#4338CA] transition-colors">
             Back to login
           </Link>
         </div>
+        {searchParams.get('debug') === '1' && (
+          <div className="mt-4 text-center text-[11px] text-[#A8A29E]">
+            server: {config?.environment || 'unknown'} · v{config?.version || 'dev'} · API {absoluteApiBase()}
+          </div>
+        )}
       </div>
     );
   }
 
-  if (config?.signup_mode === 'invite_only' && !config?.needs_setup) {
+  if (state === 'invite_only') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#FAFAF9] px-4 py-12">
         <div className="w-full max-w-[400px] bg-white rounded-[10px] border border-[#E7E5E4] shadow-sm p-8 text-center">
@@ -146,12 +155,17 @@ export default function SignupPage() {
           </div>
           <h1 className="text-lg font-bold tracking-tight text-[#1C1917] mb-2">Invitation Required</h1>
           <p className="text-xs text-[#78716C] mb-6">
-            Accounts are created by invitation only. Check your email for an invite link from your team.
+            {signupMessage(config)}
           </p>
           <Link to="/login" className="text-xs font-medium text-[#4F46E5] hover:text-[#4338CA] transition-colors">
             Back to login
           </Link>
         </div>
+        {searchParams.get('debug') === '1' && (
+          <div className="mt-4 text-center text-[11px] text-[#A8A29E]">
+            server: {config?.environment || 'unknown'} · v{config?.version || 'dev'} · API {absoluteApiBase()}
+          </div>
+        )}
       </div>
     );
   }
@@ -192,6 +206,11 @@ export default function SignupPage() {
             </Link>
           </div>
         </div>
+        {searchParams.get('debug') === '1' && (
+          <div className="mt-4 text-center text-[11px] text-[#A8A29E]">
+            server: {config?.environment || 'unknown'} · v{config?.version || 'dev'} · API {absoluteApiBase()}
+          </div>
+        )}
       </div>
     );
   }
@@ -203,10 +222,10 @@ export default function SignupPage() {
           N
         </div>
         <h1 className="text-xl font-bold tracking-tight text-[#1C1917] mb-1">
-          {config?.needs_setup ? 'Set up your workspace' : 'Create an account'}
+          {state === 'setup' ? 'Set up your workspace' : 'Create an account'}
         </h1>
         <p className="text-xs text-[#78716C] mb-6">
-          {config?.needs_setup ? 'Create the initial superadmin account' : 'Start dispatching notifications in minutes'}
+          {state === 'setup' ? 'Create the initial superadmin account' : 'Start dispatching notifications in minutes'}
         </p>
 
         {error && (
@@ -251,7 +270,7 @@ export default function SignupPage() {
             <p className="mt-1 text-[11px] text-[#A8A29E]">Minimum 8 characters</p>
           </div>
 
-          {!config?.needs_setup && (
+          {showWorkspaceName(config) && (
             <Input
               label="Workspace name"
               id="workspace-name"
@@ -283,6 +302,11 @@ export default function SignupPage() {
           </Link>
         </div>
       </div>
+      {searchParams.get('debug') === '1' && (
+        <div className="mt-4 text-center text-[11px] text-[#A8A29E]">
+          server: {config?.environment || 'unknown'} · v{config?.version || 'dev'} · API {absoluteApiBase()}
+        </div>
+      )}
     </div>
   );
 }
