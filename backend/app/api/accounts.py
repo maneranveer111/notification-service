@@ -150,6 +150,14 @@ def signup(request: Request, payload: SignupRequest, db: Session = Depends(get_d
     user_count = db.scalar(select(func.count(User.id))) or 0
     if user_count == 0:
         default_ws_id = get_default_workspace_id(db)
+
+        # Optionally rename the default workspace (keep slug=default, plan=unlimited).
+        ws_name = (payload.workspace_name or "").strip()
+        if ws_name and 1 <= len(ws_name) <= 100:
+            default_ws = db.get(Workspace, default_ws_id)
+            if default_ws:
+                default_ws.name = ws_name
+
         user = User(
             email=target_email,
             password_hash=hash_password(payload.password),

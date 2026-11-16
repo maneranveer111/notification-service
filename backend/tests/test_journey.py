@@ -196,7 +196,7 @@ def test_complete_platform_journey():
         resp_put_brevo = client.put(
             "/providers/brevo",
             headers=h2,
-            json={"api_key": "xkeysib-supersecretapi1234", "from_email": "sender@ws2.com", "from_name": "WS2"},
+            json={"api_key": "xkeysib-supersecretapi1234", "from_email": "sender@example.com", "from_name": "WS2"},
         )
         assert resp_put_brevo.status_code == 200
         assert "supersecretapi1234" not in resp_put_brevo.text
@@ -398,11 +398,11 @@ def test_complete_platform_journey():
         resp_inv = client.post(
             "/workspaces/current/invitations",
             headers=h2,
-            json={"email": "viewer@ws2.com", "role": "viewer"},
+            json={"email": "viewer@example.com", "role": "viewer"},
         )
         assert resp_inv.status_code == 201
         inv_email = captured_emails[-1]
-        assert "viewer@ws2.com" in inv_email["to"]
+        assert "viewer@example.com" in inv_email["to"]
         m_inv = re.search(r"token=([A-Za-z0-9_\-\.]+)", inv_email["body"])
         assert m_inv is not None
         inv_token = m_inv.group(1)

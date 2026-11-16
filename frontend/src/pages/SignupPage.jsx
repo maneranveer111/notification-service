@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { getPublicConfig, apiFetch, ApiError, absoluteApiBase } from '../lib/api';
 import { signupState, showWorkspaceName, signupMessage } from '../lib/signupRules';
+import { EXAMPLE_EMAIL } from '../lib/examples';
 import { useAuth } from '../lib/auth';
 import { describeError } from '../lib/errors';
 import PasswordInput from '../components/PasswordInput';
@@ -222,7 +223,7 @@ export default function SignupPage() {
           N
         </div>
         <h1 className="text-xl font-bold tracking-tight text-[#1C1917] mb-1">
-          {state === 'setup' ? 'Set up your workspace' : 'Create an account'}
+          {state === 'setup' ? 'Create the admin account for this installation' : 'Create an account'}
         </h1>
         <p className="text-xs text-[#78716C] mb-6">
           {state === 'setup' ? 'Create the initial superadmin account' : 'Start dispatching notifications in minutes'}
@@ -255,7 +256,7 @@ export default function SignupPage() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="name@company.com"
+            placeholder={EXAMPLE_EMAIL}
           />
 
           <div>
@@ -272,10 +273,10 @@ export default function SignupPage() {
 
           {showWorkspaceName(config) && (
             <Input
-              label="Workspace name"
+              label={state === 'setup' ? 'Workspace name (optional)' : 'Workspace name'}
               id="workspace-name"
               type="text"
-              required
+              required={state !== 'setup'}
               value={workspaceName}
               onChange={(e) => setWorkspaceName(e.target.value)}
               placeholder="Acme Corp"

@@ -103,7 +103,7 @@ services:
       context: ./backend
       args:
         GIT_SHA: ${GIT_SHA:-dev}
-    command: celery -A app.celery_app worker -B -l info -Q ${CELERY_QUEUE:-notification_service_queue},${CELERY_QUEUE:-notification_service_queue}_high,${CELERY_QUEUE:-notification_service_queue}_low
+    command: celery -A app.celery_app worker -B -s /tmp/celerybeat-schedule -l info -Q ${CELERY_QUEUE:-notification_service_queue},${CELERY_QUEUE:-notification_service_queue}_high,${CELERY_QUEUE:-notification_service_queue}_low
     environment:
       <<: *backend-env
     depends_on:

@@ -19,16 +19,16 @@ for t in tables:
     count = cur.fetchone()[0]
     print(f"  {t}: {count} rows")
 
-# Confirm real account exists (email only, no hash)
+# Confirm admin account exists (email only, no hash)
 cur.execute(
     "SELECT email, is_active, email_verified_at IS NOT NULL as verified "
-    "FROM users WHERE email = 'maneranveer369@gmail.com'"
+    "FROM users WHERE role = 'admin' LIMIT 1"
 )
 row = cur.fetchone()
 if row:
-    print(f"\nReal account found: email={row[0]}, is_active={row[1]}, verified={row[2]}")
+    print(f"\nAdmin account found: email={row[0]}, is_active={row[1]}, verified={row[2]}")
 else:
-    print("\nReal account NOT found in notification_db — may need to re-register.")
+    print("\nNo admin account found in notification_db — may need to run first-time setup.")
 
 conn.close()
 

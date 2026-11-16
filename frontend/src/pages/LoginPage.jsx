@@ -4,6 +4,7 @@ import { useAuth } from '../lib/auth';
 import { getPublicConfig, apiFetch, ApiError, absoluteApiBase } from '../lib/api';
 import { canShowSignupLink, signupMessage } from '../lib/signupRules';
 import { describeError } from '../lib/errors';
+import { EXAMPLE_EMAIL } from '../lib/examples';
 import PasswordInput from '../components/PasswordInput';
 import Captcha from '../components/Captcha';
 import Button from '../components/ui/Button';
@@ -172,7 +173,7 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@company.com"
+                placeholder={EXAMPLE_EMAIL}
               />
               {config?.turnstile_site_key && (
                 <Captcha
@@ -231,7 +232,7 @@ export default function LoginPage() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="name@company.com"
+            placeholder={EXAMPLE_EMAIL}
           />
 
           <div>

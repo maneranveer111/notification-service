@@ -265,7 +265,7 @@ async def create_or_update_provider(
         if from_number and not re.match(r"^\+[1-9]\d{6,14}$", from_number):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="from_number must be a valid E.164 phone number (e.g. +1234567890)",
+                detail="from_number must be a valid E.164 phone number (e.g. +14155550100)",
             )
 
         merged_conf = {

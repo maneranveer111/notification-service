@@ -25,6 +25,7 @@ import Badge from '../../components/ui/Badge';
 import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
 import Switch from '../../components/ui/Switch';
+import { EXAMPLE_PHONE, EXAMPLE_FROM_PHONE } from '../../lib/examples';
 
 const PROVIDER_META = {
   brevo: {
@@ -166,11 +167,11 @@ function ProviderCard({
 
       {/* Action Buttons */}
       {isAdmin && (
-        <div className="flex flex-wrap items-center gap-2 pt-4 mt-2 border-t border-[#E7E5E4] min-w-0">
+        <div className="flex flex-wrap items-center gap-2 pt-4 mt-2 border-t border-[#E7E5E4]">
           <Button
-            variant={connected ? 'secondary' : 'secondary'}
+            variant="secondary"
             size="sm"
-            className="flex-1 min-w-0"
+            className="shrink-0 whitespace-nowrap"
             onClick={() => onEdit(providerKey)}
             disabled={is503}
             icon={Plug}
@@ -182,7 +183,7 @@ function ProviderCard({
               <Button
                 variant="secondary"
                 size="sm"
-                className="shrink-0"
+                className="shrink-0 whitespace-nowrap"
                 onClick={() => onTest(providerKey)}
                 disabled={is503}
               >
@@ -191,7 +192,7 @@ function ProviderCard({
               <Button
                 variant="destructive"
                 size="sm"
-                className="shrink-0"
+                className="shrink-0 whitespace-nowrap"
                 onClick={() => onDisconnect(providerKey)}
                 disabled={is503}
               >
@@ -366,7 +367,7 @@ function EditModal({ providerKey, info, onClose, onSaved, is503 }) {
                   type="email"
                   value={fromEmail}
                   onChange={(e) => setFromEmail(e.target.value)}
-                  placeholder="sender@yourdomain.com"
+                  placeholder="sender@example.com"
                   error={errors.fromEmail}
                 />
                 <Input
@@ -430,7 +431,7 @@ function EditModal({ providerKey, info, onClose, onSaved, is503 }) {
                   type="email"
                   value={smtpFromEmail}
                   onChange={(e) => setSmtpFromEmail(e.target.value)}
-                  placeholder="notifications@yourdomain.com"
+                  placeholder="notifications@example.com"
                   error={errors.smtpFromEmail}
                 />
                 <div className="pt-1">
@@ -479,7 +480,7 @@ function EditModal({ providerKey, info, onClose, onSaved, is503 }) {
                   type="tel"
                   value={fromNumber}
                   onChange={(e) => setFromNumber(e.target.value)}
-                  placeholder="+18166843869"
+                  placeholder={EXAMPLE_FROM_PHONE}
                   error={errors.fromNumber}
                 />
               </>
@@ -584,7 +585,7 @@ function TestModal({ providerKey, onClose, onTested }) {
               required
               value={to}
               onChange={(e) => setTo(e.target.value)}
-              placeholder={isEmail ? 'test@example.com' : '+18166843869'}
+              placeholder={isEmail ? 'test@example.com' : EXAMPLE_PHONE}
               autoFocus
             />
             <div className="flex gap-2.5 pt-1">
@@ -689,16 +690,17 @@ function WebhooksPanel({ is503 }) {
             <label className="block text-xs font-medium text-[#1C1917]">
               Brevo Webhook URL
             </label>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <input
                 type="text"
                 readOnly
                 value={webhooks.brevo_url}
-                className="block w-full bg-[#FAFAF9] border border-[#E7E5E4] rounded-[6px] text-xs font-mono text-[#1C1917] px-3 py-2 select-all focus:outline-none"
+                className="block min-w-0 flex-1 bg-[#FAFAF9] border border-[#E7E5E4] rounded-[6px] text-xs font-mono text-[#1C1917] px-3 py-2 select-all focus:outline-none overflow-x-auto"
               />
               <Button
                 variant="secondary"
                 size="sm"
+                className="shrink-0 whitespace-nowrap"
                 onClick={() => copyUrl('brevo', webhooks.brevo_url)}
                 icon={copiedField === 'brevo' ? Check : Copy}
               >
@@ -715,16 +717,17 @@ function WebhooksPanel({ is503 }) {
             <label className="block text-xs font-medium text-[#1C1917]">
               Twilio Webhook URL
             </label>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <input
                 type="text"
                 readOnly
                 value={webhooks.twilio_url}
-                className="block w-full bg-[#FAFAF9] border border-[#E7E5E4] rounded-[6px] text-xs font-mono text-[#1C1917] px-3 py-2 select-all focus:outline-none"
+                className="block min-w-0 flex-1 bg-[#FAFAF9] border border-[#E7E5E4] rounded-[6px] text-xs font-mono text-[#1C1917] px-3 py-2 select-all focus:outline-none overflow-x-auto"
               />
               <Button
                 variant="secondary"
                 size="sm"
+                className="shrink-0 whitespace-nowrap"
                 onClick={() => copyUrl('twilio', webhooks.twilio_url)}
                 icon={copiedField === 'twilio' ? Check : Copy}
               >
@@ -855,7 +858,7 @@ export default function ProvidersPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
             {Object.keys(PROVIDER_META).map((key) => (
               <ProviderCard
                 key={key}

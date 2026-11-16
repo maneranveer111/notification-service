@@ -315,7 +315,7 @@ def test_delivery_attempt_recording_and_timeline():
     db = next(get_db())
     notif = Notification(
         channel="sms",
-        recipient="+1234567890",
+        recipient="+14155550123",
         body="Attempt test message",
         status="pending",
     )

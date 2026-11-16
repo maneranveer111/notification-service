@@ -225,7 +225,7 @@ def test_twilio_webhook_undelivered_with_error(client, db_session):
     notif = Notification(
         id=uuid.uuid4(),
         channel="sms",
-        recipient="+1234567890",
+        recipient="+14155550123",
         status="sent",
         provider_message_id=sid,
     )

@@ -161,7 +161,7 @@ def test_retries_transient_error_triggers_retry_with_countdown():
     mock_notif = Notification(
         id=uuid.uuid4(),
         channel="sms",
-        recipient="+1234567890",
+        recipient="+14155550123",
         status="pending",
         attempt_count=0,
     )

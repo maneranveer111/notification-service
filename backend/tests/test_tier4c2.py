@@ -417,11 +417,11 @@ def test_workspace_isolation_quota(db):
     r.set(key_a, 100)
 
     # WS A gets 429
-    resp_a = client.post("/notifications/email", headers=h_a, json={"recipient": "a@ex.com", "subject": "S", "body": "B"})
+    resp_a = client.post("/notifications/email", headers=h_a, json={"recipient": "a@example.com", "subject": "S", "body": "B"})
     assert resp_a.status_code == 429
 
     # WS B can still send freely
-    resp_b = client.post("/notifications/email", headers=h_b, json={"recipient": "b@ex.com", "subject": "S", "body": "B"})
+    resp_b = client.post("/notifications/email", headers=h_b, json={"recipient": "b@example.com", "subject": "S", "body": "B"})
     assert resp_b.status_code == 200
     assert int(r.get(key_b) or 0) == 1
 
@@ -562,7 +562,7 @@ def test_get_usage_redis_fallback_to_db(db):
     h = _auth_headers(user, ws.id)
 
     # Insert 2 notifications in DB for today
-    notif1 = Notification(workspace_id=ws.id, channel="email", recipient="a@b.com", status="sent")
+    notif1 = Notification(workspace_id=ws.id, channel="email", recipient="a@example.com", status="sent")
     notif2 = Notification(workspace_id=ws.id, channel="sms", recipient="+1234", status="pending")
     db.add_all([notif1, notif2])
     db.commit()

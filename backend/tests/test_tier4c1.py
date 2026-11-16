@@ -205,7 +205,7 @@ def test_h3_signup_timing_oracle_hashes_password_on_collision(db):
 # ---------------------------------------------------------------------------
 
 def test_crypto_round_trip():
-    payload = {"api_key": "secret123", "from_email": "a@b.com"}
+    payload = {"api_key": "secret123", "from_email": "a@example.com"}
     encrypted = encrypt_json(payload)
     decrypted = decrypt_json(encrypted)
     assert decrypted == payload
@@ -307,7 +307,7 @@ def test_put_smtp_provider_validates_ssrf_and_port(db):
     resp_port = client.put(
         "/providers/smtp",
         headers=h,
-        json={"host": "smtp.example.com", "port": 9999, "username": "u", "password": "p", "from_email": "a@b.com"},
+        json={"host": "smtp.example.com", "port": 9999, "username": "u", "password": "p", "from_email": "a@example.com"},
     )
     assert resp_port.status_code == 422
 
@@ -316,7 +316,7 @@ def test_put_smtp_provider_validates_ssrf_and_port(db):
         resp_ssrf = client.put(
             "/providers/smtp",
             headers=h,
-            json={"host": "smtp.internal.local", "port": 587, "username": "u", "password": "p", "from_email": "a@b.com"},
+            json={"host": "smtp.internal.local", "port": 587, "username": "u", "password": "p", "from_email": "a@example.com"},
         )
         assert resp_ssrf.status_code == 422
 
@@ -369,7 +369,7 @@ def test_missing_encryption_key_returns_503(db):
         resp = client.put(
             "/providers/brevo",
             headers=h,
-            json={"api_key": "key", "from_email": "a@b.com"},
+            json={"api_key": "key", "from_email": "a@example.com"},
         )
         assert resp.status_code == 503
         assert "Encryption is not configured" in resp.json()["detail"]
@@ -428,7 +428,7 @@ def test_provider_test_endpoint_sanitizes_errors(db):
         client.put(
             "/providers/smtp",
             headers=h,
-            json={"host": "smtp.example.com", "port": 587, "username": "u", "password": secret_key, "from_email": "a@b.com"},
+            json={"host": "smtp.example.com", "port": 587, "username": "u", "password": secret_key, "from_email": "a@example.com"},
         )
 
         with patch("app.api.providers._send_smtp", side_effect=Exception(f"Failed with secret {secret_key}")):
@@ -480,7 +480,7 @@ def test_workspace_without_provider_gets_422_on_creation(db):
     resp_sms = client.post(
         "/notifications/sms",
         headers=h,
-        json={"recipient": "+1234567890", "message": "Hi"},
+        json={"recipient": "+14155550123", "message": "Hi"},
     )
     assert resp_sms.status_code == 422
     assert resp_sms.json()["code"] == "no_provider"
@@ -592,13 +592,13 @@ def test_workspace_twilio_webhook_validates_signature(db):
     client.put(
         "/providers/twilio",
         headers=h,
-        json={"account_sid": "AC1234567890", "auth_token": auth_token, "from_number": "+1234567890"},
+        json={"account_sid": "AC1234567890", "auth_token": auth_token, "from_number": "+14155550100"},
     )
 
     notif = Notification(
         workspace_id=ws.id,
         channel="sms",
-        recipient="+1987654321",
+        recipient="+14155550123",
         provider="twilio",
         provider_message_id="SM1234567890",
         status="sent",

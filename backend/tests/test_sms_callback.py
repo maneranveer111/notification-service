@@ -9,7 +9,7 @@ def _create_twilio_config(status_callback: str | None = None) -> TwilioConfig:
     return TwilioConfig(
         account_sid="ACmockaccount12345678901234567890",
         auth_token="mockauthtoken123456789012345678",
-        from_number="+15551234567",
+        from_number="+14155550100",
         status_callback=status_callback,
     )
 
@@ -44,15 +44,15 @@ def test_send_sms_omits_localhost_callback():
     mock_client.messages.create.return_value = MagicMock(sid="SMmock123")
 
     with patch("app.services.sms_service.Client", return_value=mock_client):
-        sid = send_sms("+15559876543", "Hello local", config=cfg)
+        sid = send_sms("+14155550123", "Hello local", config=cfg)
         assert sid == "SMmock123"
 
         mock_client.messages.create.assert_called_once()
         kwargs = mock_client.messages.create.call_args.kwargs
         assert "status_callback" not in kwargs
-        assert kwargs["to"] == "+15559876543"
+        assert kwargs["to"] == "+14155550123"
         assert kwargs["body"] == "Hello local"
-        assert kwargs["from_"] == "+15551234567"
+        assert kwargs["from_"] == "+14155550100"
 
 
 def test_send_sms_omits_127_0_0_1_callback():
@@ -61,7 +61,7 @@ def test_send_sms_omits_127_0_0_1_callback():
     mock_client.messages.create.return_value = MagicMock(sid="SMmock123")
 
     with patch("app.services.sms_service.Client", return_value=mock_client):
-        sid = send_sms("+15559876543", "Hello 127", config=cfg)
+        sid = send_sms("+14155550123", "Hello 127", config=cfg)
         assert sid == "SMmock123"
 
         mock_client.messages.create.assert_called_once()
@@ -76,7 +76,7 @@ def test_send_sms_passes_public_https_callback():
     mock_client.messages.create.return_value = MagicMock(sid="SMmock123")
 
     with patch("app.services.sms_service.Client", return_value=mock_client):
-        sid = send_sms("+15559876543", "Hello prod", config=cfg)
+        sid = send_sms("+14155550123", "Hello prod", config=cfg)
         assert sid == "SMmock123"
 
         mock_client.messages.create.assert_called_once()
@@ -91,7 +91,7 @@ def test_send_sms_passes_ngrok_https_callback():
     mock_client.messages.create.return_value = MagicMock(sid="SMmock123")
 
     with patch("app.services.sms_service.Client", return_value=mock_client):
-        sid = send_sms("+15559876543", "Hello ngrok", config=cfg)
+        sid = send_sms("+14155550123", "Hello ngrok", config=cfg)
         assert sid == "SMmock123"
 
         mock_client.messages.create.assert_called_once()
@@ -105,7 +105,7 @@ def test_send_sms_handles_missing_callback_safely():
     mock_client.messages.create.return_value = MagicMock(sid="SMmock123")
 
     with patch("app.services.sms_service.Client", return_value=mock_client):
-        sid = send_sms("+15559876543", "Hello none", config=cfg)
+        sid = send_sms("+14155550123", "Hello none", config=cfg)
         assert sid == "SMmock123"
 
         mock_client.messages.create.assert_called_once()

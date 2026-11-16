@@ -76,7 +76,7 @@ export default function LandingPage() {
   -H "Idempotency-Key: req_7781a" \\
   -d '{
     "channel": "email",
-    "recipient": "elena.rostova@linear.app",
+    "recipient": "elena.rostova@example.com",
     "template": "tmpl_welcome_v2",
     "variables": {
       "name": "Elena Rostova",
@@ -89,7 +89,7 @@ const notify = new Notify({ apiKey: 'ntfy_live_k8s9d' });
 
 const response = await notify.send({
   channel: 'email',
-  recipient: 'elena.rostova@linear.app',
+  recipient: 'elena.rostova@example.com',
   template: 'tmpl_welcome_v2',
   variables: {
     name: 'Elena Rostova',
@@ -102,7 +102,7 @@ client = NotifyClient(api_key="ntfy_live_k8s9d")
 
 response = client.send(
     channel="email",
-    recipient="elena.rostova@linear.app",
+    recipient="elena.rostova@example.com",
     template="tmpl_welcome_v2",
     variables={
         "name": "Elena Rostova",
@@ -116,7 +116,7 @@ response = client.send(
   "status": "delivered",
   "provider": "brevo-eu",
   "attempts": 1,
-  "recipient": "elena.rostova@linear.app",
+  "recipient": "elena.rostova@example.com",
   "template_version": 2,
   "created_at": "2026-11-14T10:30:00Z"
 }`;

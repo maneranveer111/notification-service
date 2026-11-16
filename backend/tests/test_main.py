@@ -24,7 +24,7 @@ def test_missing_api_key():
     response = client.post(
         "/notifications/email",
         json={
-            "recipient": "test@gmail.com",
+            "recipient": "test@example.com",
             "subject": "Test",
             "body": "Test body"
         }

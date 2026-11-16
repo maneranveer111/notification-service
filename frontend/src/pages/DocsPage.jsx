@@ -16,9 +16,8 @@ function MethodBadge({ method }) {
   };
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono font-bold uppercase border ${
-        colors[method] || 'bg-[#F5F5F4] text-[#44403C] border-[#E7E5E4]'
-      }`}
+      className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono font-bold uppercase border ${colors[method] || 'bg-[#F5F5F4] text-[#44403C] border-[#E7E5E4]'
+        }`}
     >
       {method}
     </span>
@@ -131,7 +130,7 @@ function buildSections(apiBase) {
       description:
         'Send an SMS message via a configured SMS provider (e.g. Twilio). The workspace must have an SMS provider credential configured.',
       schema: [
-        { field: 'recipient', type: 'string', required: true, description: 'Recipient phone number in E.164 format (e.g. +15551234567)' },
+        { field: 'recipient', type: 'string', required: true, description: 'Recipient phone number in E.164 format (e.g. +14155550123)' },
         { field: 'body', type: 'string', required: false, description: 'Message text (mutually exclusive with template_id)' },
         { field: 'template_id', type: 'string', required: false, description: 'Template ID to render' },
         { field: 'template_vars', type: 'object', required: false, description: 'Variables passed to the template' },
@@ -140,14 +139,14 @@ function buildSections(apiBase) {
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "recipient": "+15551234567",
+    "recipient": "+14155550123",
     "body": "Your verification code is 123456"
   }'`,
       response: `{
   "id": "notif_def456",
   "status": "pending",
   "channel": "sms",
-  "recipient": "+15551234567",
+  "recipient": "+14155550123",
   "created_at": "2024-01-15T10:31:00Z"
 }`,
     },

@@ -21,6 +21,7 @@ import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import Switch from '../components/ui/Switch';
+import { EXAMPLE_PHONE } from '../lib/examples';
 
 function renderPreview(text, vars) {
   if (!text) return '';
@@ -359,7 +360,7 @@ export default function SendPage() {
               tab === 'email'
                 ? 'user@example.com'
                 : tab === 'sms'
-                ? '+18166843869'
+                ? '+14155550123'
                 : 'https://hooks.slack.com/services/... or https://discord.com/api/webhooks/...'
             }
             helper={

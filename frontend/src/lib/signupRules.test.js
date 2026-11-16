@@ -11,7 +11,7 @@ test('needs_setup: true overrides signup_mode=open', () => {
   const cfg = { needs_setup: true, signup_mode: 'open' };
   assert.equal(signupState(cfg), 'setup');
   assert.equal(canShowSignupLink(cfg), true);
-  assert.equal(showWorkspaceName(cfg), false);
+  assert.equal(showWorkspaceName(cfg), true);
   assert.equal(signupMessage(cfg), '');
 });
 
@@ -19,7 +19,7 @@ test('needs_setup: true overrides signup_mode=invite_only', () => {
   const cfg = { needs_setup: true, signup_mode: 'invite_only' };
   assert.equal(signupState(cfg), 'setup');
   assert.equal(canShowSignupLink(cfg), true);
-  assert.equal(showWorkspaceName(cfg), false);
+  assert.equal(showWorkspaceName(cfg), true);
   assert.equal(signupMessage(cfg), '');
 });
 
@@ -27,7 +27,7 @@ test('needs_setup: true overrides signup_mode=closed', () => {
   const cfg = { needs_setup: true, signup_mode: 'closed' };
   assert.equal(signupState(cfg), 'setup');
   assert.equal(canShowSignupLink(cfg), true);
-  assert.equal(showWorkspaceName(cfg), false);
+  assert.equal(showWorkspaceName(cfg), true);
   assert.equal(signupMessage(cfg), '');
 });
 

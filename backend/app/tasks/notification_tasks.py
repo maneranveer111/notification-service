@@ -500,6 +500,15 @@ def dispatch_scheduled() -> dict:
     Scheduled sends task running via Celery Beat every 30 seconds.
     Moves due scheduled notifications to pending and enqueues them.
     """
+    # Beat heartbeat — store current UTC epoch in Redis for /health/deep monitoring.
+    try:
+        from app.services.rate_limit import get_redis_client
+        r = get_redis_client()
+        import time as _time
+        r.set("beat:last_run", int(_time.time()), ex=600)
+    except Exception:
+        pass  # Never let a Redis error block scheduling
+
     now = datetime.now(timezone.utc)
     db: Session = SessionLocal()
     dispatched = []

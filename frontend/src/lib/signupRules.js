@@ -18,7 +18,8 @@ export function canShowSignupLink(config) {
 }
 
 export function showWorkspaceName(config) {
-  return signupState(config) === 'open';
+  const state = signupState(config);
+  return state === 'open' || state === 'setup';
 }
 
 export function signupMessage(config) {

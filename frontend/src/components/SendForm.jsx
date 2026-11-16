@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { sendEmail, sendSMS } from "../api";
+import { EXAMPLE_EMAIL, EXAMPLE_PHONE } from "../lib/examples";
 
 export default function SendForm({ onSent }) {
   const [channel, setChannel] = useState("email");
@@ -68,7 +69,7 @@ export default function SendForm({ onSent }) {
             required
             value={recipient}
             onChange={(e) => setRecipient(e.target.value)}
-            placeholder={channel === "email" ? "user@example.com" : "+919876543210"}
+            placeholder={channel === "email" ? EXAMPLE_EMAIL : EXAMPLE_PHONE}
             className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>

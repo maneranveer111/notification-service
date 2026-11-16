@@ -144,7 +144,7 @@ Open .env and fill in your values:
 DATABASE_URL=postgresql://postgres:your_password@localhost:5432/notification_db
 REDIS_URL=redis://localhost:6379
 SENDGRID_API_KEY=your_sendgrid_api_key
-SENDGRID_FROM_EMAIL=your_verified_sender@gmail.com
+SENDGRID_FROM_EMAIL=your_verified_sender@example.com
 TWILIO_ACCOUNT_SID=your_twilio_account_sid
 TWILIO_AUTH_TOKEN=your_twilio_auth_token
 TWILIO_FROM_NUMBER=+1xxxxxxxxxx

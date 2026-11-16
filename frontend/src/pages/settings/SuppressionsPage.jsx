@@ -13,6 +13,7 @@ import Pagination from '../../components/Pagination';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
+import { EXAMPLE_PHONE } from '../../lib/examples';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 
@@ -181,7 +182,7 @@ export default function SuppressionsPage() {
                 value={addRecipient}
                 onChange={(e) => setAddRecipient(e.target.value)}
                 placeholder={
-                  addChannel === 'email' ? 'user@example.com' : '+18166843869'
+                  addChannel === 'email' ? 'user@example.com' : EXAMPLE_PHONE
                 }
               />
             </div>

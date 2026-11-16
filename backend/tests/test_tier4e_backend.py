@@ -128,7 +128,7 @@ def _auth_headers(user, workspace_id=None):
 def test_1_own_email_creds_win_over_platform(db):
     ws = _create_workspace(db, name="OwnEmailWS", use_platform_providers=True)
 
-    own_from_email = "own-brevo@workspace.example.com"
+    own_from_email = "own-brevo@example.com"
     config_data = {
         "api_key": "xkeysib-own-workspace-key-9999",
         "from_email": own_from_email,
@@ -146,7 +146,7 @@ def test_1_own_email_creds_win_over_platform(db):
     # Override platform brevo settings to a clearly different from_email
     with _settings_override(
         brevo_api_key="platform-key-0000",
-        brevo_from_email="platform@platform.example.com",
+        brevo_from_email="platform@example.com",
         email_provider_order="brevo,smtp",
     ):
         result = resolve_email_providers(db, ws)
@@ -156,7 +156,7 @@ def test_1_own_email_creds_win_over_platform(db):
     assert provider_name == "brevo"
     # Must use the workspace's own from_email, not the platform one
     assert provider_config.from_email == own_from_email
-    assert provider_config.from_email != "platform@platform.example.com"
+    assert provider_config.from_email != "platform@example.com"
 
 
 # ---------------------------------------------------------------------------
@@ -207,7 +207,7 @@ def test_3_no_creds_no_platform_fallback(db):
 def test_4_own_sms_creds_win_over_platform(db):
     ws = _create_workspace(db, name="OwnSMSWS", use_platform_providers=True)
 
-    own_from_number = "+19995550001"
+    own_from_number = "+19995550100"
     config_data = {
         "account_sid": "ACworkspace1234567890123456789012",
         "auth_token": "workspace_auth_token_123456789012",
@@ -226,14 +226,14 @@ def test_4_own_sms_creds_win_over_platform(db):
     with _settings_override(
         twilio_account_sid="ACplatform1234567890123456789012",
         twilio_auth_token="platform_auth_token_123456789012",
-        twilio_from_number="+10000000000",
+        twilio_from_number="+15005550006",
     ):
         result = resolve_sms_provider(db, ws)
 
     assert result is not None
     # Must use the workspace's own from_number, not the platform one
     assert result.from_number == own_from_number
-    assert result.from_number != "+10000000000"
+    assert result.from_number != "+15005550006"
     # Callback URL must include the workspace's webhook_token
     assert ws.webhook_token in result.status_callback
 
@@ -319,7 +319,7 @@ def test_9_has_email_provider_own_cred_returns_true(db):
 
     config_data = {
         "api_key": "xkeysib-test-key-1111",
-        "from_email": "own@workspace.example.com",
+        "from_email": "own@example.com",
         "from_name": "Own WS",
     }
     cred = ProviderCredential(
@@ -374,7 +374,7 @@ def test_11_has_sms_provider_own_cred_returns_true(db):
     config_data = {
         "account_sid": "ACworkspace9999999999999999999999",
         "auth_token": "own_auth_token_000000000000000000",
-        "from_number": "+19995550002",
+        "from_number": "+19995550101",
     }
     cred = ProviderCredential(
         workspace_id=ws.id,

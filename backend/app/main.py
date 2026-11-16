@@ -250,10 +250,23 @@ def health_deep(
     except Exception:
         worker_status = "none"
 
+    beat_status = "none"
+    try:
+        from app.services.rate_limit import get_redis_client
+        import time as _time
+        r = get_redis_client()
+        raw = r.get("beat:last_run")
+        if raw is not None:
+            age = _time.time() - float(raw)
+            beat_status = "ok" if age <= 120 else "stale"
+    except Exception:
+        pass
+
     return {
         "db": db_status,
         "redis": redis_status,
         "worker": worker_status,
+        "beat": beat_status,
         "queues": queues,
         "environment": settings.environment,
         "version": os.environ.get("APP_VERSION", "dev"),

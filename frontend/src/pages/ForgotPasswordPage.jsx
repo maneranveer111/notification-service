@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getPublicConfig, apiFetch } from '../lib/api';
 import { describeError } from '../lib/errors';
+import { EXAMPLE_EMAIL } from '../lib/examples';
 import Captcha from '../components/Captcha';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
@@ -73,7 +74,7 @@ export default function ForgotPasswordPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="name@company.com"
+              placeholder={EXAMPLE_EMAIL}
             />
             {config?.turnstile_site_key && (
               <Captcha

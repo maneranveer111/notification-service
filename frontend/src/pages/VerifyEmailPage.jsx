@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { apiFetch, getPublicConfig } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { EXAMPLE_EMAIL } from '../lib/examples';
 import Captcha from '../components/Captcha';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
@@ -68,7 +69,7 @@ export default function VerifyEmailPage() {
               type="email"
               value={resendEmail}
               onChange={(e) => setResendEmail(e.target.value)}
-              placeholder="name@company.com"
+              placeholder={EXAMPLE_EMAIL}
             />
             {config?.turnstile_site_key && (
               <Captcha siteKey={config.turnstile_site_key} onToken={setCaptchaToken} resetSignal={null} />

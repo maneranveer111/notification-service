@@ -112,7 +112,7 @@ class TestSMSNotification:
                 "/notifications/sms",
                 headers=HEADERS,
                 json={
-                    "recipient": "+919673631519",
+                    "recipient": "+14155550123",
                     "message": "Test SMS message"
                 }
             )
@@ -132,7 +132,7 @@ class TestSMSNotification:
             "/notifications/sms",
             headers=HEADERS,
             json={
-                "recipient": "+919673631519"
+                "recipient": "+14155550123"
             }
         )
 
