@@ -40,6 +40,7 @@ class SignupRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8)
     workspace_name: str | None = Field(default=None, max_length=100)
+    full_name: str | None = Field(default=None, max_length=100)
     captcha_token: str | None = None
 
 
@@ -122,6 +123,7 @@ def _build_token_response(user: User, db: Session, target_ws_id: UUID | None = N
             id=user.id,
             email=user.email,
             role=user.role,
+            full_name=user.full_name,
         ),
         workspace=workspace_info,
         is_superadmin=user.is_superadmin,
@@ -158,14 +160,20 @@ def signup(request: Request, payload: SignupRequest, db: Session = Depends(get_d
             if default_ws:
                 default_ws.name = ws_name
 
+        if settings.require_email_verification:
+            verified_at: datetime | None = None
+        else:
+            verified_at = datetime.now(timezone.utc)
+
         user = User(
             email=target_email,
             password_hash=hash_password(payload.password),
             role="admin",
             is_superadmin=True,
             is_active=True,
-            email_verified_at=datetime.now(timezone.utc),
+            email_verified_at=verified_at,
             last_workspace_id=default_ws_id,
+            full_name=(payload.full_name or '').strip() or None,
         )
         db.add(user)
         db.flush()
@@ -174,6 +182,30 @@ def signup(request: Request, payload: SignupRequest, db: Session = Depends(get_d
         db.add(mem)
         db.commit()
         db.refresh(user)
+
+        if settings.require_email_verification:
+            # Do not mark the first owner verified and do not issue an access token
+            # before verification. Send the verification email using the same secure
+            # mechanism as regular signup. If enqueueing fails, return an honest
+            # error (never claim the email was sent); the owner can recover via
+            # /auth/resend-verification or by re-submitting signup (which routes to
+            # the existing-unverified resend path).
+            token = make_verify_email_token(user.id)
+            link = f"{settings.frontend_public_url}/verify-email?token={token}"
+            subject, body = verification_email(link)
+            if queue_system_email(target_email, subject, body):
+                return JSONResponse(
+                    status_code=status.HTTP_202_ACCEPTED,
+                    content={"message": "Verification email sent", "email": target_email},
+                )
+            return JSONResponse(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                content={
+                    "detail": "Account created, but the verification email could not be sent. "
+                              "Request a new verification email to activate your account.",
+                    "email": target_email,
+                },
+            )
 
         res = _build_token_response(user, db, default_ws_id)
         return JSONResponse(status_code=status.HTTP_201_CREATED, content=res.model_dump(mode="json"))
@@ -202,19 +234,30 @@ def signup(request: Request, payload: SignupRequest, db: Session = Depends(get_d
             # Case 2: Existing unverified account
             # Reuse existing account, do not generate unlimited tokens
             if settings.require_email_verification:
+                # Attempt a resend only when not rate-limited. A rate-limited
+                # request returns the same vague acknowledgment (no email
+                # enumeration, no misleading "sent" claim because no send was
+                # attempted). Only an actual enqueue failure yields an error.
+                attempted = False
+                sent = False
                 if check_rate_limit(f"resend:{target_email}", 1):
+                    attempted = True
                     token = make_verify_email_token(existing_user.id)
                     link = f"{settings.frontend_public_url}/verify-email?token={token}"
                     subject, body = verification_email(link)
-                    queue_system_email(existing_user.email, subject, body)
-
+                    sent = queue_system_email(existing_user.email, subject, body)
+                if not attempted or sent:
+                    return JSONResponse(
+                        status_code=status.HTTP_202_ACCEPTED,
+                        content={
+                            "message": "If this email is unverified, a verification link has been sent.",
+                            "email": target_email,
+                            "status": "pending_verification",
+                        },
+                    )
                 return JSONResponse(
-                    status_code=status.HTTP_202_ACCEPTED,
-                    content={
-                        "message": "If this email is unverified, a verification link has been sent.",
-                        "email": target_email,
-                        "status": "pending_verification",
-                    },
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    content={"detail": "Could not send the verification email right now. Please try again later."},
                 )
             else:
                 raise HTTPException(
@@ -241,6 +284,7 @@ def signup(request: Request, payload: SignupRequest, db: Session = Depends(get_d
             is_active=True,
             email_verified_at=None if settings.require_email_verification else datetime.now(timezone.utc),
             last_workspace_id=ws.id,
+            full_name=(payload.full_name or '').strip() or None,
         )
         db.add(user)
         db.flush()
@@ -280,12 +324,29 @@ def signup(request: Request, payload: SignupRequest, db: Session = Depends(get_d
         token = make_verify_email_token(user.id)
         link = f"{settings.frontend_public_url}/verify-email?token={token}"
         subject, body = verification_email(link)
-        check_rate_limit(f"resend:{target_email}", 1)
-        queue_system_email(target_email, subject, body)
-
+        if check_rate_limit(f"resend:{target_email}", 1):
+            # Rate limiter permits: queue the verification email. Preserve the
+            # existing 503 for an actual enqueue failure.
+            if queue_system_email(target_email, subject, body):
+                return JSONResponse(
+                    status_code=status.HTTP_202_ACCEPTED,
+                    content={"message": "Verification email sent", "email": target_email},
+                )
+            return JSONResponse(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                content={"detail": "Could not send the verification email right now. Please try again later."},
+            )
+        # Rate-limited: do not queue and do not claim an email was sent. Return a
+        # vague anti-enumeration 202 (same conditional framing as the resend and
+        # existing-unverified flows) so the rate-limit state is not revealed. The
+        # user and workspace are NOT rolled back; the owner can recover via
+        # /auth/resend-verification.
         return JSONResponse(
             status_code=status.HTTP_202_ACCEPTED,
-            content={"message": "Verification email sent", "email": target_email},
+            content={
+                "message": "If this email is unverified, a verification link can be requested.",
+                "email": target_email,
+            },
         )
     else:
         res = _build_token_response(user, db, ws.id)
@@ -325,7 +386,14 @@ def resend_verification(request: Request, payload: ResendVerificationRequest, db
             token = make_verify_email_token(user.id)
             link = f"{settings.frontend_public_url}/verify-email?token={token}"
             subject, body = verification_email(link)
-            queue_system_email(user.email, subject, body)
+            # Only an actual enqueue failure for a real unverified user yields an
+            # honest error; the vague 202 is preserved for no-user / rate-limited /
+            # already-verified cases to avoid email enumeration.
+            if not queue_system_email(user.email, subject, body):
+                return JSONResponse(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    content={"detail": "Could not send the verification email right now. Please try again later."},
+                )
 
     return {"message": "If this email is unverified, a verification link has been sent."}
 

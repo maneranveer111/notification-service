@@ -69,6 +69,8 @@ def send_system_email_task(self, to: str, subject: str, body: str):
             subject,
             sanitized_err,
         )
+        # Fail the task. Permanent errors must not be converted into endless retries.
+        raise
     except Exception as e:
         sanitized_err = _sanitize_error_str(str(e))
         logger.error(
@@ -78,4 +80,6 @@ def send_system_email_task(self, to: str, subject: str, body: str):
             sanitized_err,
             exc_info=True,
         )
+        # Fail the task. Unexpected sending errors must not be silently swallowed.
+        raise
 

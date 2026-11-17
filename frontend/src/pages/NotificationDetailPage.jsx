@@ -276,6 +276,16 @@ export default function NotificationDetailPage() {
               {notification.provider || '—'}
             </span>
           </div>
+          {notification.requested_provider && (
+            <div>
+              <span className="text-[11px] text-[#78716C] block">
+                Requested Provider
+              </span>
+              <span className="text-xs font-medium text-[#1C1917] capitalize">
+                {notification.requested_provider}
+              </span>
+            </div>
+          )}
           <div>
             <span className="text-[11px] text-[#78716C] block">
               Provider Message ID

@@ -7,10 +7,16 @@ from app.tasks.system_tasks import send_system_email_task
 logger = logging.getLogger(__name__)
 
 
-def queue_system_email(to: str, subject: str, body: str) -> None:
+def queue_system_email(to: str, subject: str, body: str) -> bool:
     """
     Enqueue a system transactional email (verification, reset, invitation).
-    Does NOT write to the notifications table. Catches enqueue errors and logs an error.
+    Does NOT write to the notifications table.
+
+    Returns True if the Celery task was enqueued successfully, or False if
+    enqueueing failed (e.g., broker unavailable). Callers MUST check the return
+    value and MUST NOT report a "sent"/"email sent" success when it is False.
+    Never raises, to keep the HTTP API contract safe; failures are logged with a
+    masked recipient and no credentials or tokens are exposed.
     """
     masked_to = mask_email(to)
     target_queue = queue_for("normal")
@@ -26,6 +32,7 @@ def queue_system_email(to: str, subject: str, body: str) -> None:
             masked_to,
             subject,
         )
+        return True
     except Exception as exc:
         logger.error(
             "Failed to enqueue system email to %s on queue %s: %s",
@@ -34,4 +41,5 @@ def queue_system_email(to: str, subject: str, body: str) -> None:
             exc,
             exc_info=True,
         )
+        return False
 

@@ -19,8 +19,10 @@ export default function SignupPage() {
   const [config, setConfig] = useState(null);
   const [configLoading, setConfigLoading] = useState(true);
 
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [workspaceName, setWorkspaceName] = useState('');
   const [captchaToken, setCaptchaToken] = useState(null);
   const [error, setError] = useState(null);
@@ -63,10 +65,16 @@ export default function SignupPage() {
     setIsAccountExists(false);
     setSubmitting(true);
     try {
+      if (password !== confirmPassword) {
+        setError('Passwords do not match');
+        setSubmitting(false);
+        return;
+      }
       const body = {
         email,
         password,
         workspace_name: showWorkspaceName(config) ? workspaceName || undefined : undefined,
+        full_name: fullName.trim() || undefined,
         captcha_token: captchaToken || undefined,
       };
       const { data, response } = await apiFetch('/auth/signup', {
@@ -250,6 +258,17 @@ export default function SignupPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
+            label="Full Name"
+            id="full-name"
+            type="text"
+            required
+            maxLength={100}
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            placeholder="Jane Doe"
+          />
+
+          <Input
             label="Email"
             id="email"
             type="email"
@@ -271,6 +290,14 @@ export default function SignupPage() {
             <p className="mt-1 text-[11px] text-[#A8A29E]">Minimum 8 characters</p>
           </div>
 
+          <PasswordInput
+            id="confirm-password"
+            label="Confirm Password"
+            required
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+          />
+
           {showWorkspaceName(config) && (
             <Input
               label={state === 'setup' ? 'Workspace name (optional)' : 'Workspace name'}
@@ -279,7 +306,7 @@ export default function SignupPage() {
               required={state !== 'setup'}
               value={workspaceName}
               onChange={(e) => setWorkspaceName(e.target.value)}
-              placeholder="Acme Corp"
+              placeholder="Enter your workspace name"
             />
           )}
 

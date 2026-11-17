@@ -99,6 +99,7 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
             id=user.id,
             email=user.email,
             role=user.role,
+            full_name=user.full_name,
         ),
         workspace=workspace_info,
         is_superadmin=user.is_superadmin,

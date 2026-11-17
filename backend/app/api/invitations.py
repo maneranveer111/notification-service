@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, JSONResponse, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -148,7 +148,17 @@ def create_invitation(
         role=payload.role,
         link=link,
     )
-    queue_system_email(to=target_email, subject=subject, body=body)
+    if not queue_system_email(to=target_email, subject=subject, body=body):
+        # The invitation is already committed (pending) and is intentionally NOT
+        # rolled back, so the existing resend workflow can recover. Return a safe
+        # 503 without revealing internal details.
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "detail": "Invitation saved, but the email could not be sent. "
+                          "Resend it later to deliver the invite."
+            },
+        )
 
     return InvitationRead(
         id=invitation.id,
@@ -244,7 +254,16 @@ def resend_invitation(
         role=invitation.role,
         link=link,
     )
-    queue_system_email(to=invitation.email, subject=subject, body=body)
+    if not queue_system_email(to=invitation.email, subject=subject, body=body):
+        # The invitation is already committed (pending) and is intentionally NOT
+        # rolled back, so the existing resend workflow can recover.
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "detail": "The invitation email could not be sent. "
+                          "Resend it later to deliver the invite."
+            },
+        )
 
     inviter = db.get(User, invitation.invited_by)
     return InvitationRead(

@@ -202,6 +202,10 @@ services:
         value: "true"
       - key: TURNSTILE_SECRET_KEY
         sync: false
+      - key: TURNSTILE_SITE_KEY
+        sync: false
+      - key: WEBHOOK_VERIFY
+        value: "true"
       - key: WEBHOOK_CHANNEL_ALLOWED_HOSTS
         value: hooks.slack.com,discord.com,discordapp.com
       # --- Limits ---
@@ -209,6 +213,8 @@ services:
         value: "30"
       - key: BULK_MAX_RECIPIENTS
         value: "200"
+      - key: MAX_WORKSPACES_PER_USER
+        value: "5"
       # --- DB pool ---
       - key: DB_POOL_SIZE
         value: "3"
