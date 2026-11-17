@@ -17,7 +17,7 @@ from app.models.notification import Notification
 from app.models.suppression import Suppression
 from app.models.template import Template
 from app.models.workspace import Workspace
-from app.services.providers import has_email_provider, has_sms_provider
+from app.services.providers import has_email_provider, has_sms_provider, resolve_email_providers
 from app.schemas.notification import (
     BatchStatusResponse,
     BulkNotificationCreate,
@@ -97,6 +97,7 @@ def _queue_notification(
     scheduled_at: datetime | None = None,
     batch_id: UUID | None = None,
     category: str = "transactional",
+    requested_provider: str | None = None,
 ) -> NotificationQueued:
     request_hash = None
     scoped_idempotency_key = None
@@ -144,6 +145,7 @@ def _queue_notification(
                 subject=subject,
                 body=body,
                 provider=provider,
+                requested_provider=requested_provider,
                 status="suppressed",
                 priority=priority,
                 scheduled_at=scheduled_at,
@@ -200,6 +202,7 @@ def _queue_notification(
         subject=subject,
         body=body,
         provider=provider,
+        requested_provider=requested_provider,
         status=initial_status,
         priority=priority,
         scheduled_at=scheduled_at,
@@ -275,6 +278,19 @@ def queue_email(
             detail={"detail": "No email provider is configured for this workspace", "code": "no_provider"},
         )
 
+    resolved = resolve_email_providers(db, ws)
+    if payload.provider:
+        if not any(n == payload.provider for n, _ in resolved):
+            raise HTTPException(
+                status_code=422,
+                detail={"detail": "That provider is not configured for this workspace", "code": "provider_not_configured"},
+            )
+        effective_provider = payload.provider
+    elif ws and ws.preferred_email_provider:
+        effective_provider = ws.preferred_email_provider
+    else:
+        effective_provider = "brevo"
+
     template_id = None
     subject = payload.subject
     body = payload.body
@@ -314,7 +330,8 @@ def queue_email(
         recipient=payload.recipient,
         subject=subject,
         body=body,
-        provider="brevo",
+        provider=effective_provider,
+        requested_provider=payload.provider,
         db=db,
         response=response,
         workspace_id=principal.workspace_id,
@@ -523,9 +540,26 @@ def bulk_notifications(
                     detail="Must provide either template_id or message for sms",
                 )
 
+    if payload.channel == "email":
+        resolved = resolve_email_providers(db, ws)
+        if getattr(payload, "provider", None):
+            if not any(n == payload.provider for n, _ in resolved):
+                raise HTTPException(
+                    status_code=422,
+                    detail={"detail": "That provider is not configured for this workspace", "code": "provider_not_configured"},
+                )
+            bulk_provider = payload.provider
+        elif ws and ws.preferred_email_provider:
+            bulk_provider = ws.preferred_email_provider
+        else:
+            bulk_provider = "brevo"
+    else:
+        bulk_provider = "twilio"
+
+    requested_provider = payload.provider if payload.channel == "email" else None
     batch_id = uuid4()
     initial_status = "scheduled" if payload.scheduled_at else "pending"
-    provider = "brevo" if payload.channel == "email" else "twilio"
+    provider = bulk_provider
     created_notifications = []
     suppressed_count = 0
 
@@ -556,6 +590,7 @@ def bulk_notifications(
                 subject=subj,
                 body=b_text,
                 provider=provider,
+                requested_provider=requested_provider,
                 status="suppressed",
                 priority=payload.priority,
                 scheduled_at=payload.scheduled_at,
@@ -576,6 +611,7 @@ def bulk_notifications(
             subject=subj,
             body=b_text,
             provider=provider,
+            requested_provider=requested_provider,
             status=initial_status,
             priority=payload.priority,
             scheduled_at=payload.scheduled_at,
@@ -688,6 +724,7 @@ def list_notifications(
     status: str | None = Query(default=None, description="Filter by status (pending/sent/failed/...)"),
     channel: str | None = Query(default=None, description="Filter by channel (email/sms/webhook)"),
     recipient: str | None = Query(default=None, description="Filter by recipient (case-insensitive substring)"),
+    provider: str | None = Query(default=None, pattern=r"^[a-z0-9_-]{1,30}$", description="Filter by provider"),
     batch_id: UUID | None = Query(default=None, description="Filter by batch_id"),
     limit: int = Query(default=50, ge=1, le=200, description="Number of records to return"),
     offset: int = Query(default=0, ge=0, description="Number of records to skip"),
@@ -699,6 +736,8 @@ def list_notifications(
         filters.append(Notification.channel == channel)
     if batch_id:
         filters.append(Notification.batch_id == batch_id)
+    if provider:
+        filters.append(Notification.provider == provider)
     if recipient:
         escaped = recipient.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         filters.append(Notification.recipient.ilike(f"%{escaped}%"))

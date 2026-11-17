@@ -8,7 +8,7 @@ import {
   Check,
   AlertCircle,
 } from 'lucide-react';
-import { sendBulk, getBatchStatus, listTemplates } from '../lib/api';
+import { sendBulk, getBatchStatus, listTemplates, getEmailPreference } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { parseRecipientsData } from '../lib/csv';
 import { describeError } from '../lib/errors';
@@ -49,12 +49,24 @@ export default function BulkPage() {
   const [batchStatus, setBatchStatus] = useState(null);
   const pollTimerRef = useRef(null);
 
+  // Email provider choice
+  const [emailProvider, setEmailProvider] = useState('');
+  const [availableEmailProviders, setAvailableEmailProviders] = useState([]);
+
   // Fetch templates once on mount
   useEffect(() => {
     listTemplates({ limit: 200 })
       .then((res) => setAllTemplates(res.data || []))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (channel === 'email') {
+      getEmailPreference()
+        .then((res) => setAvailableEmailProviders(res.available || []))
+        .catch(() => {});
+    }
+  }, [channel]);
 
   const channelTemplates = allTemplates.filter((t) => t.channel === channel);
   const selectedTemplate = channelTemplates.find(
@@ -180,6 +192,7 @@ export default function BulkPage() {
         priority,
         category,
         scheduled_at: scheduleIso || undefined,
+        provider: channel === 'email' ? (emailProvider || undefined) : undefined,
       };
 
       if (useTemplate) {
@@ -195,6 +208,7 @@ export default function BulkPage() {
       setBatchInfo(res);
       setRawText('');
       setFileName('');
+      setEmailProvider('');
       setSubject('');
       setBody('');
       setScheduledAtRaw('');
@@ -559,6 +573,29 @@ export default function BulkPage() {
               </div>
             </div>
           </div>
+
+          {/* Send with email provider choice */}
+          {channel === 'email' && (
+            <div className="pt-3 border-t border-[#E7E5E4]">
+              <Select
+                id="bulk-send-with-provider"
+                label="Send with"
+                value={emailProvider}
+                onChange={(e) => setEmailProvider(e.target.value)}
+                helper="Choose a specific email provider or let workspace defaults decide."
+              >
+                <option value="">Workspace default</option>
+                {['brevo', 'smtp'].map((p) => {
+                  const isAvailable = availableEmailProviders.includes(p);
+                  return (
+                    <option key={p} value={p} disabled={!isAvailable}>
+                      {p === 'brevo' ? 'Brevo' : 'SMTP'}{!isAvailable ? ' (not configured)' : ''}
+                    </option>
+                  );
+                })}
+              </Select>
+            </div>
+          )}
 
           {/* Scheduling Switch */}
           <div className="space-y-3 pt-3 border-t border-[#E7E5E4]">

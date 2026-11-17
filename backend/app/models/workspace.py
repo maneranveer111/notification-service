@@ -33,6 +33,10 @@ class Workspace(Base):
         default="free",
         server_default="free",
     )
+    preferred_email_provider: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

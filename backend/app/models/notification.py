@@ -78,6 +78,9 @@ class Notification(Base):
     provider: Mapped[str | None] = mapped_column(
         String(50), nullable=True
     )  # "brevo" / "smtp" / "twilio" / "slack" / "discord"
+    requested_provider: Mapped[str | None] = mapped_column(
+        String(20), nullable=True
+    )
     provider_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 

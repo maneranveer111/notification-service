@@ -10,6 +10,13 @@ export function describeError(err) {
       action: { label: 'Connect a provider', to: '/settings/providers' },
     };
 
+  if (code === 'provider_not_configured')
+    return {
+      title: 'Provider not configured',
+      message: typeof detail === 'string' ? detail : 'That provider is not configured for this workspace.',
+      action: { label: 'Configure providers', to: '/settings/providers' },
+    };
+
   if (code === 'quota_exceeded')
     return {
       title: 'Quota exceeded',

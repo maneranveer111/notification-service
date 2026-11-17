@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 import re
 import secrets
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -17,7 +17,7 @@ from app.security import Principal, require_admin
 from app.services.crypto import CryptoNotConfigured, decrypt_json, encrypt_json
 from app.services.email_service import _send_brevo, _send_smtp
 from app.services.net_safety import assert_public_host
-from app.services.providers import BrevoConfig, SmtpConfig, TwilioConfig
+from app.services.providers import BrevoConfig, SmtpConfig, TwilioConfig, resolve_email_providers
 from app.services.rate_limit import check_rate_limit
 from app.services.sms_service import send_sms
 
@@ -55,6 +55,11 @@ class TwilioCreateOrUpdate(BaseModel):
 
 class TestProviderRequest(BaseModel):
     to: str
+
+
+class EmailPreferenceUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    provider: Literal["brevo", "smtp"] | None = None
 
 
 def _format_credential_response(cred: ProviderCredential) -> dict[str, Any]:
@@ -135,6 +140,47 @@ def list_providers(
     ).scalars().all()
 
     return [_format_credential_response(c) for c in creds]
+
+
+@router.get("/email/preference")
+def get_email_preference(
+    principal: Principal = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    if not principal.workspace_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+    ws = db.get(Workspace, principal.workspace_id)
+    if not ws:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+    resolved = resolve_email_providers(db, ws)
+    available = list(dict.fromkeys(name for name, _ in resolved))
+    return {"provider": ws.preferred_email_provider, "available": available}
+
+
+@router.put("/email/preference")
+def set_email_preference(
+    payload: EmailPreferenceUpdate,
+    principal: Principal = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    if not principal.workspace_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+    ws = db.get(Workspace, principal.workspace_id)
+    if not ws:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+
+    if payload.provider is not None:
+        resolved = resolve_email_providers(db, ws)
+        if not any(n == payload.provider for n, _ in resolved):
+            raise HTTPException(
+                status_code=422,
+                detail={"detail": "That provider is not configured for this workspace", "code": "provider_not_configured"},
+            )
+
+    ws.preferred_email_provider = payload.provider
+    db.commit()
+    db.refresh(ws)
+    return {"provider": ws.preferred_email_provider}
 
 
 @router.put("/{provider}")

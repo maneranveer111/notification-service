@@ -238,7 +238,9 @@ def _deliver(task: Task, notification_id: str, send_fn) -> dict:
             ws = db.get(Workspace, notification.workspace_id) if notification.workspace_id else None
             if notification.channel == "email":
                 from app.services.providers import resolve_email_providers
-                email_providers = resolve_email_providers(db, ws)
+                email_providers = resolve_email_providers(
+                    db, ws, requested_provider=getattr(notification, "requested_provider", None)
+                )
                 try:
                     res = effective_send_fn(notification, on_attempt=on_email_attempt, providers=email_providers)
                 except TypeError:

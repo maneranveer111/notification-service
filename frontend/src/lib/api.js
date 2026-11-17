@@ -294,3 +294,17 @@ export async function deleteTemplate(id) {
   await request(`/templates/${id}`, { method: 'DELETE' });
   return true;
 }
+
+// ---------------------------------------------------------------------------
+// Provider preference
+// ---------------------------------------------------------------------------
+export async function getEmailPreference() {
+  return apiFetch('/providers/email/preference');
+}
+
+export async function setEmailPreference(provider) {
+  return apiFetch('/providers/email/preference', {
+    method: 'PUT',
+    body: JSON.stringify({ provider: provider || null }),
+  });
+}

@@ -13,6 +13,7 @@ import {
   sendSMS,
   sendWebhook,
   listTemplates,
+  getEmailPreference,
 } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { validateEmail, validatePhone } from '../lib/csv';
@@ -61,12 +62,24 @@ export default function SendPage() {
     crypto.randomUUID()
   );
 
+  // Email provider choice
+  const [emailProvider, setEmailProvider] = useState('');
+  const [availableEmailProviders, setAvailableEmailProviders] = useState([]);
+
   // Fetch templates once on mount
   useEffect(() => {
     listTemplates({ limit: 200 })
       .then((res) => setAllTemplates(res.data || []))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (tab === 'email') {
+      getEmailPreference()
+        .then((res) => setAvailableEmailProviders(res.available || []))
+        .catch(() => {});
+    }
+  }, [tab]);
 
   const channelTemplates = allTemplates.filter((t) => t.channel === tab);
   const selectedTemplate = channelTemplates.find(
@@ -184,6 +197,7 @@ export default function SendPage() {
           priority,
           category,
           scheduled_at: scheduleIso || undefined,
+          provider: emailProvider || undefined,
         };
         if (useTemplate) {
           payload.template_id = selectedTemplate.id;
@@ -222,6 +236,7 @@ export default function SendPage() {
 
       // Reset fields on success
       setRecipient('');
+      setEmailProvider('');
       setSubject('');
       setBody('');
       setScheduledAtRaw('');
@@ -570,6 +585,29 @@ export default function SendPage() {
               </div>
             )}
           </div>
+
+          {/* Send with email provider choice */}
+          {tab === 'email' && (
+            <div className="pt-3 border-t border-[#E7E5E4]">
+              <Select
+                id="send-with-provider"
+                label="Send with"
+                value={emailProvider}
+                onChange={(e) => setEmailProvider(e.target.value)}
+                helper="Choose a specific email provider or let workspace defaults decide."
+              >
+                <option value="">Workspace default</option>
+                {['brevo', 'smtp'].map((p) => {
+                  const isAvailable = availableEmailProviders.includes(p);
+                  return (
+                    <option key={p} value={p} disabled={!isAvailable}>
+                      {p === 'brevo' ? 'Brevo' : 'SMTP'}{!isAvailable ? ' (not configured)' : ''}
+                    </option>
+                  );
+                })}
+              </Select>
+            </div>
+          )}
 
           {/* Scheduling option (Switch) */}
           {tab !== 'webhook' && (

@@ -15,6 +15,7 @@ class EmailNotificationCreate(BaseModel):
     priority: Literal["high", "normal", "low"] = "normal"
     scheduled_at: datetime | None = None
     category: Literal["transactional", "marketing"] = "transactional"
+    provider: Literal["brevo", "smtp"] | None = None
 
 
 class SMSNotificationCreate(BaseModel):
@@ -48,6 +49,7 @@ class BulkNotificationCreate(BaseModel):
     priority: Literal["high", "normal", "low"] = "normal"
     scheduled_at: datetime | None = None
     category: Literal["transactional", "marketing"] = "transactional"
+    provider: Literal["brevo", "smtp"] | None = None
 
 
 class BulkNotificationResponse(BaseModel):
@@ -114,6 +116,7 @@ class NotificationRead(BaseModel):
     max_attempts: int
 
     provider: str | None = None
+    requested_provider: str | None = None
     provider_message_id: str | None = None
     error_message: str | None = None
 

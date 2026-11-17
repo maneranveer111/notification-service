@@ -38,6 +38,7 @@ export default function NotificationsPage() {
 
   const [status, setStatus] = useState(getParam('status'));
   const [channel, setChannel] = useState(getParam('channel'));
+  const [provider, setProvider] = useState(getParam('provider'));
   const [recipientRaw, setRecipientRaw] = useState(getParam('recipient'));
   const batchId = getParam('batch_id');
   const [page, setPage] = useState(Number(getParam('page', '1')));
@@ -59,6 +60,7 @@ export default function NotificationsPage() {
       const result = await listNotifications({
         status: status || undefined,
         channel: channel || undefined,
+        provider: provider || undefined,
         recipient: recipient || undefined,
         batch_id: batchId || undefined,
         limit: pageSize,
@@ -74,7 +76,7 @@ export default function NotificationsPage() {
     } finally {
       if (id === reqId.current) setLoading(false);
     }
-  }, [status, channel, recipient, batchId, page, pageSize]);
+  }, [status, channel, provider, recipient, batchId, page, pageSize]);
 
   useEffect(() => {
     setLoading(true);
@@ -98,12 +100,13 @@ export default function NotificationsPage() {
     const next = new URLSearchParams();
     if (status) next.set('status', status);
     if (channel) next.set('channel', channel);
+    if (provider) next.set('provider', provider);
     if (recipient) next.set('recipient', recipient);
     if (batchId) next.set('batch_id', batchId);
     if (page > 1) next.set('page', page);
     if (pageSize !== 25) next.set('limit', pageSize);
     setParams(next, { replace: true });
-  }, [status, channel, recipient, batchId, page, pageSize, setParams]);
+  }, [status, channel, provider, recipient, batchId, page, pageSize, setParams]);
 
   function resetPage() {
     setPage(1);
@@ -196,6 +199,24 @@ export default function NotificationsPage() {
                 {c}
               </option>
             ))}
+          </select>
+        </div>
+
+        <div className="w-40">
+          <select
+            value={provider}
+            onChange={(e) => {
+              setProvider(e.target.value);
+              resetPage();
+            }}
+            className="w-full bg-[#FAFAF9] border border-[#E7E5E4] rounded-[6px] px-2.5 py-1.5 text-xs text-[#1C1917] focus:outline-none focus:border-[#4F46E5] capitalize"
+          >
+            <option value="">All Providers</option>
+            <option value="brevo">Brevo</option>
+            <option value="smtp">SMTP</option>
+            <option value="twilio">Twilio</option>
+            <option value="slack">Slack</option>
+            <option value="discord">Discord</option>
           </select>
         </div>
 

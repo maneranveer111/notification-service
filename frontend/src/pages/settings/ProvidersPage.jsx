@@ -13,7 +13,7 @@ import {
   Send,
   Plug,
 } from 'lucide-react';
-import { apiFetch } from '../../lib/api';
+import { apiFetch, getEmailPreference, setEmailPreference } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import ErrorBanner from '../../components/ErrorBanner';
@@ -63,6 +63,7 @@ function ProviderCard({
   info,
   isAdmin,
   is503,
+  isDefault,
   onEdit,
   onTest,
   onDisconnect,
@@ -81,13 +82,20 @@ function ProviderCard({
           <div className="w-8 h-8 rounded-[6px] bg-[#F5F5F4] border border-[#E7E5E4] flex items-center justify-center text-[#1C1917]">
             <Icon className="w-4 h-4" strokeWidth={1.5} />
           </div>
-          <Badge
-            variant={connected ? 'success' : 'neutral'}
-            dot
-            size="sm"
-          >
-            {connected ? 'Connected' : 'Not connected'}
-          </Badge>
+          <div className="flex items-center gap-1.5">
+            {isDefault && (
+              <Badge variant="accent" size="sm">
+                Default
+              </Badge>
+            )}
+            <Badge
+              variant={connected ? 'success' : 'neutral'}
+              dot
+              size="sm"
+            >
+              {connected ? 'Connected' : 'Not connected'}
+            </Badge>
+          </div>
         </div>
 
         <div>
@@ -776,9 +784,54 @@ function WebhooksPanel({ is503 }) {
   );
 }
 
+function DefaultEmailProviderCard({
+  isAdmin,
+  is503,
+  emailPref,
+  availableProviders,
+  onPrefChange,
+}) {
+  if (!isAdmin) return null;
+
+  const emailOptions = availableProviders.filter((p) => p === 'brevo' || p === 'smtp');
+  const disabled = emailOptions.length < 2 || is503;
+
+  return (
+    <Card className="p-5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h3 className="font-semibold text-sm text-[#1C1917]">Default email provider</h3>
+          <p className="text-xs text-[#78716C] mt-0.5">
+            {emailOptions.length < 2
+              ? 'Connect at least 2 email providers to set a default fallback preference.'
+              : 'Choose which provider to attempt first when sending email notifications.'}
+          </p>
+        </div>
+        <div className="w-48 shrink-0">
+          <select
+            value={emailPref || ''}
+            onChange={(e) => onPrefChange(e.target.value || null)}
+            disabled={disabled}
+            className="w-full bg-[#FAFAF9] border border-[#E7E5E4] rounded-[6px] px-2.5 py-1.5 text-xs text-[#1C1917] focus:outline-none focus:border-[#4F46E5] disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <option value="">Automatic (default)</option>
+            {emailOptions.map((p) => (
+              <option key={p} value={p}>
+                {PROVIDER_META[p]?.label || p}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 export default function ProvidersPage() {
   const { isAdmin } = useAuth();
   const [providers, setProviders] = useState([]);
+  const [emailPref, setEmailPref] = useState(null);
+  const [availableEmailProviders, setAvailableEmailProviders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [is503, setIs503] = useState(false);
@@ -797,6 +850,13 @@ export default function ProvidersPage() {
     try {
       const data = await apiFetch('/providers');
       setProviders(data);
+      if (isAdmin) {
+        try {
+          const prefData = await getEmailPreference();
+          setEmailPref(prefData.provider);
+          setAvailableEmailProviders(prefData.available || []);
+        } catch (_) {}
+      }
       setError(null);
     } catch (e) {
       if (e.status === 503) {
@@ -808,7 +868,7 @@ export default function ProvidersPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
     load();
@@ -818,6 +878,15 @@ export default function ProvidersPage() {
   providers.forEach((p) => {
     providerMap[p.provider] = p;
   });
+
+  async function handlePrefChange(newPref) {
+    try {
+      const res = await setEmailPreference(newPref);
+      setEmailPref(res.provider);
+    } catch (e) {
+      setError(e);
+    }
+  }
 
   async function handleDisconnect() {
     const key = disconnectConfirm.provider;
@@ -866,6 +935,7 @@ export default function ProvidersPage() {
                 info={providerMap[key]}
                 isAdmin={isAdmin}
                 is503={is503}
+                isDefault={emailPref === key}
                 onEdit={(k) => setEditModal({ open: true, provider: k })}
                 onTest={(k) => setTestModal({ open: true, provider: k })}
                 onDisconnect={(k) =>
@@ -874,6 +944,14 @@ export default function ProvidersPage() {
               />
             ))}
           </div>
+
+          <DefaultEmailProviderCard
+            isAdmin={isAdmin}
+            is503={is503}
+            emailPref={emailPref}
+            availableProviders={availableEmailProviders}
+            onPrefChange={handlePrefChange}
+          />
 
           <WebhooksPanel is503={is503} />
         </>

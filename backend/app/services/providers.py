@@ -93,7 +93,9 @@ def get_platform_sms_provider() -> TwilioConfig | None:
 
 
 def resolve_email_providers(
-    db: Session, workspace: Workspace | None
+    db: Session,
+    workspace: Workspace | None,
+    requested_provider: str | None = None,
 ) -> list[tuple[str, BrevoConfig | SmtpConfig]]:
     """
     Resolve ordered list of (name, config) for email sending.
@@ -101,7 +103,14 @@ def resolve_email_providers(
     1. If workspace has own active brevo/smtp credentials, use them.
     2. Else if workspace is None or use_platform_providers is True, use platform settings.
     3. Else return empty list.
+
+    Selection logic:
+    - If requested_provider is set: use only that provider (strict, no fallback).
+    - Else if workspace.preferred_email_provider is set and in resolved list: put it first with others as fallback.
+    - Else: unchanged order.
     """
+    providers: list[tuple[str, BrevoConfig | SmtpConfig]] = []
+
     # Step 1: own active credentials always take precedence
     if workspace is not None:
         creds = db.execute(
@@ -118,7 +127,6 @@ def resolve_email_providers(
             order = [p.strip().lower() for p in raw_order if p.strip()]
 
             cred_by_provider = {c.provider: c for c in creds}
-            providers: list[tuple[str, BrevoConfig | SmtpConfig]] = []
 
             for name in order:
                 cred = cred_by_provider.get(name)
@@ -156,14 +164,19 @@ def resolve_email_providers(
                         )
                     )
 
-            return providers
-
     # Step 2: platform fallback if allowed
-    if workspace is None or workspace.use_platform_providers:
-        return get_platform_email_providers()
+    if not providers and (workspace is None or workspace.use_platform_providers):
+        providers = get_platform_email_providers()
 
-    # Step 3: no provider
-    return []
+    # Step 3: apply requested_provider or preferred_email_provider ordering
+    if requested_provider:
+        return [p for p in providers if p[0] == requested_provider]
+
+    pref = getattr(workspace, "preferred_email_provider", None) if workspace else None
+    if pref and any(p[0] == pref for p in providers):
+        return [p for p in providers if p[0] == pref] + [p for p in providers if p[0] != pref]
+
+    return providers
 
 
 def resolve_sms_provider(db: Session, workspace: Workspace | None) -> TwilioConfig | None:
