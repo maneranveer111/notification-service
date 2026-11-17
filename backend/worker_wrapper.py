@@ -9,14 +9,20 @@ request handling.
 """
 
 import os
+import signal
 import subprocess
+import sys
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from app.config import get_settings
 
+# Module-level reference to the Celery subprocess so the SIGTERM handler can reach it.
+_celery_proc = None
+
 
 def start_celery():
+    global _celery_proc
     settings = get_settings()
     q = settings.celery_queue or "notification_service_queue"
     queue = f"{q}_high,{q},{q}_low"
@@ -33,7 +39,25 @@ def start_celery():
     if os.environ.get("ENABLE_BEAT") == "true":
         cmd.extend(["-B", "--schedule=/tmp/celerybeat-schedule"])
 
-    subprocess.run(cmd)
+    _celery_proc = subprocess.Popen(cmd)
+    _celery_proc.wait()
+    rc = _celery_proc.returncode
+    print(
+        f"Celery subprocess exited with code {rc}. "
+        "Terminating health server so Render restarts the service.",
+        flush=True,
+    )
+    os._exit(1)
+
+
+def _handle_sigterm(signum, frame):
+    """Forward SIGTERM to the Celery subprocess so it shuts down cleanly."""
+    if _celery_proc is not None:
+        _celery_proc.send_signal(signal.SIGTERM)
+    sys.exit(0)
+
+
+signal.signal(signal.SIGTERM, _handle_sigterm)
 
 
 class HealthHandler(BaseHTTPRequestHandler):

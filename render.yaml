@@ -1,0 +1,220 @@
+# render.yaml — Render Blueprint for Notification Service
+# API service: FastAPI/uvicorn
+# Worker service: Celery via worker_wrapper.py
+# Both are Render "Web Services" (required for free-tier port binding)
+# External services (Neon PostgreSQL, Redis Cloud) are NOT managed here.
+
+services:
+  - type: web
+    name: notification-api
+    runtime: python
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_FORMAT
+        value: json
+      # --- Required secrets: set in Render dashboard (never committed) ---
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: API_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: UNSUBSCRIBE_SECRET
+        sync: false
+      - key: WEBHOOK_SECRET
+        sync: false
+      # --- Public URLs (set after services are deployed) ---
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: FRONTEND_PUBLIC_URL
+        sync: false
+      # --- Auth / registration ---
+      - key: SIGNUP_MODE
+        value: invite_only
+      - key: REQUIRE_EMAIL_VERIFICATION
+        value: "true"
+      # --- Mail ---
+      - key: SYSTEM_MAIL_BACKEND
+        value: provider
+      - key: EMAIL_PROVIDER_ORDER
+        value: brevo,smtp
+      - key: BREVO_API_KEY
+        sync: false
+      - key: BREVO_FROM_EMAIL
+        sync: false
+      - key: BREVO_FROM_NAME
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM_EMAIL
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USE_TLS
+        value: "true"
+      # --- SMS ---
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_FROM_NUMBER
+        sync: false
+      # --- Queues ---
+      - key: CELERY_QUEUE
+        value: notification_service_queue
+      # NOTE: ENABLE_BEAT must NOT be set on the API service.
+      # --- Security / rate limiting ---
+      - key: METRICS_TOKEN
+        sync: false
+      - key: TRUSTED_PROXY_COUNT
+        value: "1"
+      - key: RATE_LIMIT_STORAGE_URI
+        sync: false
+      - key: QUOTA_ENABLED
+        value: "true"
+      - key: TURNSTILE_SECRET_KEY
+        sync: false
+      - key: TURNSTILE_SITE_KEY
+        sync: false
+      - key: WEBHOOK_VERIFY
+        value: "true"
+      - key: WEBHOOK_CHANNEL_ALLOWED_HOSTS
+        value: hooks.slack.com,discord.com,discordapp.com
+      # --- Limits ---
+      - key: SCHEDULE_MAX_DAYS
+        value: "30"
+      - key: BULK_MAX_RECIPIENTS
+        value: "200"
+      - key: MAX_WORKSPACES_PER_USER
+        value: "5"
+      # --- DB pool (tuned for Neon free tier connection limits) ---
+      - key: DB_POOL_SIZE
+        value: "3"
+      - key: DB_MAX_OVERFLOW
+        value: "2"
+      - key: DB_POOL_TIMEOUT
+        value: "30"
+      - key: DB_POOL_RECYCLE
+        value: "1800"
+
+  - type: web
+    name: notification-worker
+    runtime: python
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python worker_wrapper.py
+    healthCheckPath: /
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_FORMAT
+        value: json
+      # --- Required secrets: set in Render dashboard (never committed) ---
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: API_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: UNSUBSCRIBE_SECRET
+        sync: false
+      - key: WEBHOOK_SECRET
+        sync: false
+      # --- Public URLs ---
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: FRONTEND_PUBLIC_URL
+        sync: false
+      # --- Auth / registration ---
+      - key: SIGNUP_MODE
+        value: invite_only
+      - key: REQUIRE_EMAIL_VERIFICATION
+        value: "true"
+      # --- Mail ---
+      - key: SYSTEM_MAIL_BACKEND
+        value: provider
+      - key: EMAIL_PROVIDER_ORDER
+        value: brevo,smtp
+      - key: BREVO_API_KEY
+        sync: false
+      - key: BREVO_FROM_EMAIL
+        sync: false
+      - key: BREVO_FROM_NAME
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM_EMAIL
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USE_TLS
+        value: "true"
+      # --- SMS ---
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_FROM_NUMBER
+        sync: false
+      # --- Queues ---
+      - key: CELERY_QUEUE
+        value: notification_service_queue
+      # --- Beat: enabled ONLY on the worker, absent on the API ---
+      - key: ENABLE_BEAT
+        value: "true"
+      # --- Security / rate limiting ---
+      - key: METRICS_TOKEN
+        sync: false
+      - key: TRUSTED_PROXY_COUNT
+        value: "1"
+      - key: RATE_LIMIT_STORAGE_URI
+        sync: false
+      - key: QUOTA_ENABLED
+        value: "true"
+      - key: TURNSTILE_SECRET_KEY
+        sync: false
+      - key: WEBHOOK_CHANNEL_ALLOWED_HOSTS
+        value: hooks.slack.com,discord.com,discordapp.com
+      # --- Limits ---
+      - key: SCHEDULE_MAX_DAYS
+        value: "30"
+      - key: BULK_MAX_RECIPIENTS
+        value: "200"
+      # --- DB pool ---
+      - key: DB_POOL_SIZE
+        value: "3"
+      - key: DB_MAX_OVERFLOW
+        value: "2"
+      - key: DB_POOL_TIMEOUT
+        value: "30"
+      - key: DB_POOL_RECYCLE
+        value: "1800"
