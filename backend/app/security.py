@@ -359,4 +359,13 @@ def require_superadmin(principal: Principal = Depends(get_principal)) -> Princip
     return principal
 
 
+def require_owner(principal: Principal = Depends(get_principal)) -> Principal:
+    if not principal.user_id or principal.workspace_role != "owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Workspace owner access required.",
+        )
+    return principal
+
+
 verify_api_key = get_principal

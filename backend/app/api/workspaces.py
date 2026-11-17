@@ -1,5 +1,6 @@
-from uuid import UUID
+import logging
 import secrets
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -11,11 +12,12 @@ from app.database import get_db
 from app.models.user import User
 from app.models.workspace import Membership, Workspace
 from app.schemas.auth import UserAuthInfo, WorkspaceInfo
-from app.security import Principal, get_principal, get_user_principal, require_admin
+from app.security import Principal, get_principal, get_user_principal, require_admin, require_owner
 from app.services.jwt_tokens import create_access_token
 from app.services.quota import get_usage
 from app.services.tenancy import generate_workspace_slug
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Workspaces"])
 settings = get_settings()
 
@@ -324,4 +326,83 @@ def leave_workspace(
 
     db.delete(membership)
     db.commit()
+
+
+class DeleteWorkspaceRequest(BaseModel):
+    confirm_name: str
+    password: str
+
+
+@router.post("/workspaces/current/delete")
+def delete_current_workspace(
+    payload: DeleteWorkspaceRequest,
+    principal: Principal = Depends(require_owner),
+    db: Session = Depends(get_db),
+):
+    from app.api.accounts import _build_token_response
+    from app.services.passwords import verify_password
+    from app.services.workspace_delete import check_delete_rate_limit, cleanup_quota_keys, delete_workspace
+
+    if not principal.user_id or not principal.workspace_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Authentication required.")
+
+    if not check_delete_rate_limit(principal.user_id, 5):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Rate limit exceeded. Try again later.",
+        )
+
+    ws = db.get(Workspace, principal.workspace_id)
+    if not ws:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found.")
+
+    if ws.slug == "default":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="The default workspace cannot be deleted.")
+
+    user = db.get(User, principal.user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found.")
+
+    name_ok = (payload.confirm_name == ws.name)
+    pw_ok = verify_password(payload.password, user.password_hash)
+
+    if not name_ok:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Workspace name does not match.")
+    if not pw_ok:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect password.")
+
+    workspace_id = principal.workspace_id
+
+    try:
+        notif_count = delete_workspace(db, workspace_id)
+    except Exception as exc:
+        logger.error("Workspace deletion failed: %s", type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not delete the workspace.",
+        )
+
+    try:
+        cleanup_quota_keys(workspace_id)
+    except Exception:
+        pass
+    logger.info("Workspace deleted: ws=%s user=%s notifications=%d", workspace_id, principal.user_id, notif_count)
+
+    # Build login response for another workspace if available
+    next_membership = db.execute(
+        select(Membership).where(
+            Membership.user_id == principal.user_id,
+            Membership.workspace_id != workspace_id,
+        ).order_by(Membership.created_at.asc())
+    ).scalars().first()
+
+    login_body = None
+    if next_membership:
+        user.last_workspace_id = next_membership.workspace_id
+        db.commit()
+        db.refresh(user)
+        login_body = _build_token_response(user, db, next_membership.workspace_id).model_dump(mode="json")
+
+    return {"deleted": True, "login": login_body}
+
 
