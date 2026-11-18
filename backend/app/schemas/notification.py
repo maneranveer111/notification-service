@@ -69,6 +69,7 @@ class NotificationQueued(BaseModel):
     id: UUID
     status: str
     channel: str
+    scheduled_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

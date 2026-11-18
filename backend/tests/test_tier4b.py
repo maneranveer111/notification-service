@@ -910,6 +910,7 @@ def test_provider_mail_does_not_log_body(caplog):
     with patch("app.tasks.system_tasks.email_service.send_email", side_effect=PermanentError("fail")), \
          _settings_override(system_mail_backend="provider"):
         with caplog.at_level(logging.ERROR, logger="app.tasks.system_tasks"):
-            send_system_email_task.run("test@example.com", "Subject", "Secret body")
+            with pytest.raises(PermanentError):
+                send_system_email_task.run("test@example.com", "Subject", "Secret body")
     for record in caplog.records:
         assert "Secret body" not in record.getMessage()

@@ -218,7 +218,7 @@ Set these in the Render dashboard for `notification-api`:
 | `SMTP_USE_TLS` | `true` |
 | `TWILIO_ACCOUNT_SID` | From Twilio console |
 | `TWILIO_AUTH_TOKEN` | From Twilio console |
-| `TWILIO_FROM_NUMBER` | E.164 format (e.g. `+15551234567`) |
+| `TWILIO_FROM_NUMBER` | E.164 format (e.g. `+15005550006`) |
 | `METRICS_TOKEN` | Generated secret |
 | `TRUSTED_PROXY_COUNT` | `1` |
 | `RATE_LIMIT_STORAGE_URI` | Same Redis Cloud URL as `REDIS_URL` |

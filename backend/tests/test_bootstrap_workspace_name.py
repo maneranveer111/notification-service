@@ -4,9 +4,15 @@ First-run setup workspace name:
 1. First-user bootstrap with workspace_name renames default workspace (keeps slug='default', plan='unlimited').
 2. First-user bootstrap without workspace_name keeps 'Default Workspace'.
 3. Normal (non-bootstrap) signup creates a new workspace.
+
+Updated to reflect that first-user bootstrap now requires email verification
+(require_email_verification=True by default), so signup returns 202 and an
+email is queued rather than issuing a token directly.
 """
+import re
 import uuid
 import pytest
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 from sqlalchemy import select, delete
 
@@ -44,19 +50,32 @@ def clean_users_and_non_default_workspaces(db):
 
 def test_bootstrap_rename_default_workspace():
     db = SessionLocal()
+    captured = []
+    def _mock_queue(to, subject, body):
+        captured.append({"to": to, "body": body})
+        return True
+
     try:
         clean_users_and_non_default_workspaces(db)
 
-        resp = client.post(
-            "/auth/signup",
-            json={
-                "email": "bootstrap_admin1@example.com",
-                "password": "Password123!",
-                "workspace_name": "My Custom Org",
-            },
-        )
-        assert resp.status_code == 201, resp.text
-        data = resp.json()
+        with patch("app.api.accounts.queue_system_email", side_effect=_mock_queue):
+            resp = client.post(
+                "/auth/signup",
+                json={
+                    "email": "bootstrap_admin1@example.com",
+                    "password": "Password123!",
+                    "workspace_name": "My Custom Org",
+                },
+            )
+        assert resp.status_code == 202, resp.text
+
+        # Verify via the emailed token
+        assert captured, "No verification email was queued"
+        token_match = re.search(r"token=([A-Za-z0-9_\-\.]+)", captured[-1]["body"])
+        assert token_match, "No token found in verification email"
+        verify_resp = client.post("/auth/verify-email", json={"token": token_match.group(1)})
+        assert verify_resp.status_code == 200, verify_resp.text
+        data = verify_resp.json()
         assert data["workspace"]["name"] == "My Custom Org"
         assert data["workspace"]["slug"] == "default"
 
@@ -69,18 +88,30 @@ def test_bootstrap_rename_default_workspace():
 
 def test_bootstrap_omitted_workspace_name_keeps_default():
     db = SessionLocal()
+    captured = []
+    def _mock_queue(to, subject, body):
+        captured.append({"to": to, "body": body})
+        return True
+
     try:
         clean_users_and_non_default_workspaces(db)
 
-        resp = client.post(
-            "/auth/signup",
-            json={
-                "email": "bootstrap_admin2@example.com",
-                "password": "Password123!",
-            },
-        )
-        assert resp.status_code == 201, resp.text
-        data = resp.json()
+        with patch("app.api.accounts.queue_system_email", side_effect=_mock_queue):
+            resp = client.post(
+                "/auth/signup",
+                json={
+                    "email": "bootstrap_admin2@example.com",
+                    "password": "Password123!",
+                },
+            )
+        assert resp.status_code == 202, resp.text
+
+        assert captured, "No verification email was queued"
+        token_match = re.search(r"token=([A-Za-z0-9_\-\.]+)", captured[-1]["body"])
+        assert token_match
+        verify_resp = client.post("/auth/verify-email", json={"token": token_match.group(1)})
+        assert verify_resp.status_code == 200, verify_resp.text
+        data = verify_resp.json()
         assert data["workspace"]["name"] == "Default Workspace"
         assert data["workspace"]["slug"] == "default"
 
@@ -93,18 +124,29 @@ def test_bootstrap_omitted_workspace_name_keeps_default():
 
 def test_normal_signup_creates_new_workspace():
     db = SessionLocal()
+    captured = []
+    def _mock_queue(to, subject, body):
+        captured.append({"to": to, "body": body})
+        return True
+
     try:
         clean_users_and_non_default_workspaces(db)
 
-        # 1. Bootstrap user
-        resp1 = client.post(
-            "/auth/signup",
-            json={
-                "email": "bootstrap_admin3@example.com",
-                "password": "Password123!",
-            },
-        )
-        assert resp1.status_code == 201
+        # 1. Bootstrap user (first user — becomes superadmin, requires verification)
+        with patch("app.api.accounts.queue_system_email", side_effect=_mock_queue):
+            resp1 = client.post(
+                "/auth/signup",
+                json={
+                    "email": "bootstrap_admin3@example.com",
+                    "password": "Password123!",
+                },
+            )
+        assert resp1.status_code == 202, resp1.text
+
+        # Verify bootstrap user so test state is consistent
+        token_match = re.search(r"token=([A-Za-z0-9_\-\.]+)", captured[-1]["body"])
+        assert token_match
+        client.post("/auth/verify-email", json={"token": token_match.group(1)})
 
         # 2. Second user (normal signup, users count > 0)
         from app.config import get_settings

@@ -89,6 +89,7 @@ def test_complete_platform_journey():
 
     def mock_queue_system_email(to, subject, body):
         captured_emails.append({"to": to, "subject": subject, "body": body})
+        return True
 
     mock_sent_emails = []
 
@@ -123,8 +124,16 @@ def test_complete_platform_journey():
             "/auth/signup",
             json={"email": "superadmin@example.com", "password": "superpassword123!"},
         )
-        assert resp_su.status_code == 201, resp_su.text
-        data_su = resp_su.json()
+        assert resp_su.status_code == 202, resp_su.text
+
+        # Verify the superadmin's email via the token from the queued email
+        v_email_su = captured_emails[-1]
+        assert "superadmin@example.com" in v_email_su["to"]
+        m_su = re.search(r"token=([A-Za-z0-9_\-\.]+)", v_email_su["body"])
+        assert m_su is not None
+        resp_verify_su = client.post("/auth/verify-email", json={"token": m_su.group(1)})
+        assert resp_verify_su.status_code == 200, resp_verify_su.text
+        data_su = resp_verify_su.json()
         assert data_su["is_superadmin"] is True
         token_su = data_su["access_token"]
         h_su = {"Authorization": f"Bearer {token_su}"}

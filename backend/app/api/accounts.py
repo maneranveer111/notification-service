@@ -291,6 +291,24 @@ def signup(request: Request, payload: SignupRequest, db: Session = Depends(get_d
 
         mem = Membership(user_id=user.id, workspace_id=ws.id, role="owner")
         db.add(mem)
+
+        # Ensure protected Default Workspace exists and user has membership in it
+        default_ws = db.scalar(select(Workspace).where(Workspace.slug == "default"))
+        if not default_ws:
+            default_ws = Workspace(
+                name="Default Workspace",
+                slug="default",
+                plan="unlimited",
+                webhook_token=secrets.token_urlsafe(32),
+                use_platform_providers=True,
+            )
+            db.add(default_ws)
+            db.flush()
+
+        def_mem = db.get(Membership, (user.id, default_ws.id))
+        if not def_mem:
+            db.add(Membership(user_id=user.id, workspace_id=default_ws.id, role="owner"))
+
         db.commit()
         db.refresh(user)
     except IntegrityError:

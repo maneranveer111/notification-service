@@ -503,7 +503,7 @@ def test_login_contract_and_security():
 
     # User sub-object contract
     user_info = data["user"]
-    assert set(user_info.keys()) == {"id", "email", "role"}
+    assert set(user_info.keys()) == {"id", "email", "role", "full_name"}
     assert user_info["id"] == str(user.id)
     assert user_info["email"] == email
     assert user_info["role"] == "admin"

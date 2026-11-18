@@ -388,13 +388,19 @@ def delete_current_workspace(
         pass
     logger.info("Workspace deleted: ws=%s user=%s notifications=%d", workspace_id, principal.user_id, notif_count)
 
-    # Build login response for another workspace if available
-    next_membership = db.execute(
-        select(Membership).where(
-            Membership.user_id == principal.user_id,
-            Membership.workspace_id != workspace_id,
-        ).order_by(Membership.created_at.asc())
-    ).scalars().first()
+    # Automatically switch the user to their existing Default Workspace
+    default_ws = db.execute(select(Workspace).where(Workspace.slug == "default")).scalar_one_or_none()
+    next_membership = None
+    if default_ws and default_ws.id != workspace_id:
+        next_membership = db.get(Membership, (principal.user_id, default_ws.id))
+
+    if not next_membership:
+        next_membership = db.execute(
+            select(Membership).where(
+                Membership.user_id == principal.user_id,
+                Membership.workspace_id != workspace_id,
+            ).order_by(Membership.created_at.asc())
+        ).scalars().first()
 
     login_body = None
     if next_membership:

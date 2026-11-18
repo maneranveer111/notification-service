@@ -11,6 +11,8 @@ request handling.
 import os
 import signal
 import subprocess
+import sys
+import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -46,7 +48,8 @@ def start_celery():
     queue = f"{q}_high,{q},{q}_low"
 
     cmd = [
-        "celery",
+        sys.executable,
+        "-m", "celery",
         "-A", "app.celery_app",
         "worker",
         "--loglevel=info",
@@ -55,7 +58,8 @@ def start_celery():
     ]
 
     if os.environ.get("ENABLE_BEAT") == "true":
-        cmd.extend(["-B", "--schedule=/tmp/celerybeat-schedule"])
+        schedule_file = os.path.join(tempfile.gettempdir(), "celerybeat-schedule")
+        cmd.extend(["-B", f"--schedule={schedule_file}"])
 
     # Serialize startup with shutdown. If shutdown was requested before we
     # began, skip launching Celery entirely. Holding the lock across Popen()

@@ -134,7 +134,8 @@ def test_provider_mode_brevo_auth_failure_logs_diagnostic(caplog):
          patch("app.services.email_service.get_settings", return_value=mock_settings), \
          patch("requests.post", return_value=mock_response), \
          caplog.at_level(logging.INFO):
-        send_system_email_task.run("user@example.com", "Verify Email", "Body text")
+        with pytest.raises(PermanentError):
+            send_system_email_task.run("user@example.com", "Verify Email", "Body text")
 
     all_logs = " ".join(r.message for r in caplog.records)
     assert "Brevo auth error 401" in all_logs
@@ -154,7 +155,8 @@ def test_provider_mode_brevo_client_error_logs_diagnostic(caplog):
          patch("app.services.email_service.get_settings", return_value=mock_settings), \
          patch("requests.post", return_value=mock_response), \
          caplog.at_level(logging.INFO):
-        send_system_email_task.run("user@example.com", "Verify Email", "Body text")
+        with pytest.raises(PermanentError):
+            send_system_email_task.run("user@example.com", "Verify Email", "Body text")
 
     all_logs = " ".join(r.message for r in caplog.records)
     assert "Brevo client error 400" in all_logs
