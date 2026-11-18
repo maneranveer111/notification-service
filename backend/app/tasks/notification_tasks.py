@@ -49,11 +49,12 @@ def _sanitize_error_message(msg: str | None, notification: Notification | None =
 
 
 def queue_for(priority: str | None) -> str:
+    high, normal, low = settings.get_queue_names()
     if priority == "high":
-        return f"{settings.celery_queue}_high"
+        return high
     elif priority == "low":
-        return f"{settings.celery_queue}_low"
-    return settings.celery_queue
+        return low
+    return normal
 
 
 class NotificationTask(Task):

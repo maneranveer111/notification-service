@@ -32,7 +32,7 @@ def delete_workspace(db: Session, workspace_id: UUID) -> int:
         ).scalar_one_or_none()
         if not ws:
             raise ValueError("Workspace not found")
-        if ws.slug == "default":
+        if ws.slug == "default" or bool(getattr(ws, "is_default", False)):
             raise ValueError("Cannot delete default workspace")
 
         # Count notifications before deleting (for audit log)

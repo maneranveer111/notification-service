@@ -25,6 +25,7 @@ export default function SignupPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [workspaceName, setWorkspaceName] = useState('');
   const [captchaToken, setCaptchaToken] = useState(null);
+  const [devVerificationLink, setDevVerificationLink] = useState(null);
   const [error, setError] = useState(null);
   const [isAccountExists, setIsAccountExists] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -73,7 +74,7 @@ export default function SignupPage() {
       const body = {
         email,
         password,
-        workspace_name: showWorkspaceName(config) ? workspaceName || undefined : undefined,
+        workspace_name: workspaceName.trim() || undefined,
         full_name: fullName.trim() || undefined,
         captcha_token: captchaToken || undefined,
       };
@@ -86,6 +87,9 @@ export default function SignupPage() {
         loginWithResponse(data);
         navigate('/');
       } else if (response.status === 202) {
+        if (data?.dev_verification_link) {
+          setDevVerificationLink(data.dev_verification_link);
+        }
         setSubmitted(true);
       }
     } catch (err) {
@@ -190,6 +194,18 @@ export default function SignupPage() {
           <p className="text-xs text-[#78716C] mb-6 leading-relaxed">
             We sent a verification email to <strong className="text-[#1C1917] font-medium">{email}</strong>. Follow the link inside to activate your workspace.
           </p>
+          {devVerificationLink && (
+            <div className="mb-5 p-3 rounded-[6px] bg-[#FEF3C7] border border-[#FCD34D] text-[#92400E] text-xs text-left">
+              <div className="font-semibold mb-1">Development mode</div>
+              <p className="text-[11px] text-[#B45309] mb-2">Email verification link:</p>
+              <a
+                href={devVerificationLink}
+                className="inline-flex items-center gap-1 font-medium text-[#92400E] underline hover:no-underline cursor-pointer"
+              >
+                Open verification link &rarr;
+              </a>
+            </div>
+          )}
           {config?.turnstile_site_key && (
             <div className="mb-4">
               <Captcha
@@ -298,17 +314,15 @@ export default function SignupPage() {
             onChange={(e) => setConfirmPassword(e.target.value)}
           />
 
-          {showWorkspaceName(config) && (
-            <Input
-              label={state === 'setup' ? 'Workspace name (optional)' : 'Workspace name'}
-              id="workspace-name"
-              type="text"
-              required={state !== 'setup'}
-              value={workspaceName}
-              onChange={(e) => setWorkspaceName(e.target.value)}
-              placeholder="Enter your workspace name"
-            />
-          )}
+          <Input
+            label="Workspace name"
+            id="workspace-name"
+            type="text"
+            required
+            value={workspaceName}
+            onChange={(e) => setWorkspaceName(e.target.value)}
+            placeholder="Enter your workspace name"
+          />
 
           {config?.turnstile_site_key && (
             <Captcha

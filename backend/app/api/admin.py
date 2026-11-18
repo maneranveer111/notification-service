@@ -18,6 +18,7 @@ from app.schemas.user import UserCreate, UserRead, UserUpdate
 from app.security import Principal, require_admin, require_superadmin
 from app.services.plans import PLANS, get_plan
 from app.services.passwords import hash_password
+from app.services.tenancy import ensure_personal_default_workspace
 
 router = APIRouter(
     prefix="/admin",
@@ -262,6 +263,9 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)):
         email_verified_at=datetime.now(timezone.utc),
     )
     db.add(user)
+    db.flush()
+    personal_ws = ensure_personal_default_workspace(db, user)
+    user.last_workspace_id = personal_ws.id
     db.commit()
     db.refresh(user)
     return user

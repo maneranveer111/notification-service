@@ -515,9 +515,11 @@ def test_admin_cannot_grant_owner_role(db):
 
 
 def test_leave_workspace(db):
-    user_a = _make_user_with_workspace(db, f"leave_owner_{uuid.uuid4().hex[:8]}@example.com")
-    mem_a = db.execute(select(Membership).where(Membership.user_id == user_a.id)).scalars().first()
-    ws_a_id = mem_a.workspace_id
+    custom_ws = Workspace(name="Leave WS", slug=f"leave-{uuid.uuid4().hex[:6]}")
+    db.add(custom_ws)
+    db.flush()
+    user_a = _make_user_with_workspace(db, f"leave_owner_{uuid.uuid4().hex[:8]}@example.com", ws_id=custom_ws.id)
+    ws_a_id = custom_ws.id
 
     user_b = _make_user_with_workspace(db, f"leave_viewer_{uuid.uuid4().hex[:8]}@example.com", ws_role="viewer", ws_id=ws_a_id)
     h_b = _jwt_headers(user_b.id, user_b.email, "viewer", workspace_id=ws_a_id)
@@ -654,7 +656,7 @@ def test_max_workspaces_per_user_limit(db):
     h_a = _jwt_headers(user_a.id, user_a.email, "owner", workspace_id=ws_a_id)
 
     max_ws = settings.max_workspaces_per_user
-    for i in range(max_ws - 1):
+    for i in range(max_ws):
         resp = client.post("/workspaces", headers=h_a, json={"name": f"Extra WS {i}"})
         assert resp.status_code == 201, f"Should succeed at iteration {i}: {resp.text}"
 

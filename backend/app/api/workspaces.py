@@ -80,7 +80,17 @@ def list_workspaces(
     for m in memberships:
         ws = db.get(Workspace, m.workspace_id)
         if ws:
-            result.append(WorkspaceInfo(id=ws.id, name=ws.name, slug=ws.slug, role=m.role))
+            is_def = bool(getattr(ws, "is_default", False))
+            result.append(
+                WorkspaceInfo(
+                    id=ws.id,
+                    name=ws.name,
+                    slug=ws.slug,
+                    role=m.role,
+                    is_default=is_def,
+                    deletable=(m.role == "owner" and not is_def),
+                )
+            )
     return result
 
 
@@ -94,7 +104,12 @@ def create_workspace(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User authentication required.")
 
     count = db.scalar(
-        select(func.count(Membership.user_id)).where(Membership.user_id == principal.user_id)
+        select(func.count(Membership.user_id))
+        .join(Workspace, Workspace.id == Membership.workspace_id)
+        .where(
+            Membership.user_id == principal.user_id,
+            Workspace.is_default.is_(False),
+        )
     ) or 0
     if count >= settings.max_workspaces_per_user:
         raise HTTPException(
@@ -119,7 +134,15 @@ def create_workspace(
     db.commit()
     db.refresh(ws)
 
-    return WorkspaceInfo(id=ws.id, name=ws.name, slug=ws.slug, role="owner")
+    is_def = bool(getattr(ws, "is_default", False))
+    return WorkspaceInfo(
+        id=ws.id,
+        name=ws.name,
+        slug=ws.slug,
+        role="owner",
+        is_default=is_def,
+        deletable=not is_def,
+    )
 
 
 @router.post("/auth/switch-workspace", response_model=TokenSwitchResponse)
@@ -152,12 +175,29 @@ def switch_workspace(
     for m in all_memberships:
         wsi = db.get(Workspace, m.workspace_id)
         if wsi:
-            workspaces_list.append(WorkspaceInfo(id=wsi.id, name=wsi.name, slug=wsi.slug, role=m.role))
+            is_def = bool(getattr(wsi, "is_default", False))
+            workspaces_list.append(
+                WorkspaceInfo(
+                    id=wsi.id,
+                    name=wsi.name,
+                    slug=wsi.slug,
+                    role=m.role,
+                    is_default=is_def,
+                    deletable=(m.role == "owner" and not is_def),
+                )
+            )
 
     user_info: UserAuthInfo | None = None
     if user:
-        user_info = UserAuthInfo(id=user.id, email=user.email, role=user.role)
+        user_info = UserAuthInfo(
+            id=user.id,
+            email=user.email,
+            role=user.role,
+            full_name=user.full_name,
+            is_superadmin=user.is_superadmin,
+        )
 
+    is_curr_def = bool(getattr(ws, "is_default", False))
     token = create_access_token(
         user_id=principal.user_id,
         email=principal.email,
@@ -168,7 +208,14 @@ def switch_workspace(
         access_token=token,
         token_type="bearer",
         expires_in=settings.jwt_expire_minutes * 60,
-        workspace=WorkspaceInfo(id=ws.id, name=ws.name, slug=ws.slug, role=membership.role),
+        workspace=WorkspaceInfo(
+            id=ws.id,
+            name=ws.name,
+            slug=ws.slug,
+            role=membership.role,
+            is_default=is_curr_def,
+            deletable=(membership.role == "owner" and not is_curr_def),
+        ),
         user=user_info,
         workspaces=workspaces_list,
         is_superadmin=user.is_superadmin if user else False,
@@ -185,7 +232,16 @@ def get_current_workspace(
     ws = db.get(Workspace, principal.workspace_id)
     if not ws:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found.")
-    return WorkspaceInfo(id=ws.id, name=ws.name, slug=ws.slug, role=principal.workspace_role or "")
+    is_def = bool(getattr(ws, "is_default", False))
+    role = principal.workspace_role or ""
+    return WorkspaceInfo(
+        id=ws.id,
+        name=ws.name,
+        slug=ws.slug,
+        role=role,
+        is_default=is_def,
+        deletable=(role == "owner" and not is_def),
+    )
 
 
 @router.patch("/workspaces/current", response_model=WorkspaceInfo)
@@ -203,7 +259,16 @@ def update_current_workspace(
     ws.name = payload.name
     db.commit()
     db.refresh(ws)
-    return WorkspaceInfo(id=ws.id, name=ws.name, slug=ws.slug, role=principal.workspace_role or "")
+    is_def = bool(getattr(ws, "is_default", False))
+    role = principal.workspace_role or ""
+    return WorkspaceInfo(
+        id=ws.id,
+        name=ws.name,
+        slug=ws.slug,
+        role=role,
+        is_default=is_def,
+        deletable=(role == "owner" and not is_def),
+    )
 
 
 @router.get("/workspaces/current/members", response_model=list[dict])
@@ -223,6 +288,7 @@ def list_members(
             result.append({
                 "user_id": str(m.user_id),
                 "email": user.email,
+                "full_name": user.full_name,
                 "role": m.role,
             })
     return result
@@ -310,6 +376,13 @@ def leave_workspace(
     if not principal.user_id or not principal.workspace_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Authentication required.")
 
+    ws = db.get(Workspace, principal.workspace_id)
+    if ws and bool(getattr(ws, "is_default", False)):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot leave your default workspace.",
+        )
+
     membership = db.get(Membership, (principal.user_id, principal.workspace_id))
     if not membership:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not a member of this workspace.")
@@ -356,8 +429,8 @@ def delete_current_workspace(
     if not ws:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found.")
 
-    if ws.slug == "default":
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="The default workspace cannot be deleted.")
+    if ws.slug == "default" or bool(getattr(ws, "is_default", False)):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This is your default workspace and cannot be deleted")
 
     user = db.get(User, principal.user_id)
     if not user:
@@ -388,11 +461,18 @@ def delete_current_workspace(
         pass
     logger.info("Workspace deleted: ws=%s user=%s notifications=%d", workspace_id, principal.user_id, notif_count)
 
-    # Automatically switch the user to their existing Default Workspace
-    default_ws = db.execute(select(Workspace).where(Workspace.slug == "default")).scalar_one_or_none()
-    next_membership = None
-    if default_ws and default_ws.id != workspace_id:
-        next_membership = db.get(Membership, (principal.user_id, default_ws.id))
+    # Automatically switch the user to their existing personal Default Workspace
+    from sqlalchemy import and_
+    next_membership = db.execute(
+        select(Membership)
+        .join(Workspace, Workspace.id == Membership.workspace_id)
+        .where(
+            Membership.user_id == principal.user_id,
+            Membership.workspace_id != workspace_id,
+            Workspace.is_default.is_(True),
+        )
+        .order_by(Membership.created_at.asc())
+    ).scalars().first()
 
     if not next_membership:
         next_membership = db.execute(

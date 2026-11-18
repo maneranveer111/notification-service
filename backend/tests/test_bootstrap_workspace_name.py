@@ -77,10 +77,11 @@ def test_bootstrap_rename_default_workspace():
         assert verify_resp.status_code == 200, verify_resp.text
         data = verify_resp.json()
         assert data["workspace"]["name"] == "My Custom Org"
-        assert data["workspace"]["slug"] == "default"
+        assert data["workspace"]["slug"] != "default"
 
+        # Global default workspace was not renamed
         default_ws = db.scalar(select(Workspace).where(Workspace.slug == "default"))
-        assert default_ws.name == "My Custom Org"
+        assert default_ws.name == "Default Workspace"
     finally:
         clean_users_and_non_default_workspaces(db)
         db.close()
@@ -112,9 +113,10 @@ def test_bootstrap_omitted_workspace_name_keeps_default():
         verify_resp = client.post("/auth/verify-email", json={"token": token_match.group(1)})
         assert verify_resp.status_code == 200, verify_resp.text
         data = verify_resp.json()
-        assert data["workspace"]["name"] == "Default Workspace"
-        assert data["workspace"]["slug"] == "default"
+        assert data["workspace"]["name"] == "bootstrap_admin2's Workspace"
+        assert data["workspace"]["slug"] != "default"
 
+        # Global default workspace remains untouched
         default_ws = db.scalar(select(Workspace).where(Workspace.slug == "default"))
         assert default_ws.name == "Default Workspace"
     finally:

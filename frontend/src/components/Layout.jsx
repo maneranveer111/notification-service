@@ -245,7 +245,14 @@ export default function Layout({ children }) {
                         : 'text-[#57534E] hover:bg-[#FAFAF9] hover:text-[#1C1917]'
                     }`}
                   >
-                    <span className="truncate">{ws.name}</span>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="truncate">{ws.name}</span>
+                      {(ws.is_default || ws.slug === 'default') && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#F5F5F4] text-[#78716C] border border-[#E7E5E4] shrink-0">
+                          Default
+                        </span>
+                      )}
+                    </div>
                     {ws.id === workspace?.id && (
                       <Check
                         className="w-3.5 h-3.5 text-[#4F46E5] shrink-0"
@@ -335,8 +342,8 @@ export default function Layout({ children }) {
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-2 min-w-0">
               <span className="w-1.5 h-1.5 rounded-full bg-[#15803D] shrink-0" />
-              <p className="text-[11px] text-[#78716C] truncate" title={user?.email}>
-                {user?.email}
+              <p className="text-[11px] text-[#78716C] truncate" title={user?.full_name || user?.email}>
+                {user?.full_name || user?.email}
               </p>
             </div>
             <button

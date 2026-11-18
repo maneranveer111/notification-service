@@ -13,7 +13,7 @@ from app.database import SessionLocal
 from app.models.user import User
 from app.models.workspace import Membership
 from app.services.passwords import hash_password
-from app.services.tenancy import get_default_workspace_id
+from app.services.tenancy import ensure_personal_default_workspace
 
 
 def main():
@@ -68,12 +68,10 @@ def main():
         db.flush()
 
         try:
-            default_ws_id = get_default_workspace_id(db)
-            ws_role = "owner" if role == "admin" else "viewer"
-            membership = Membership(user_id=user.id, workspace_id=default_ws_id, role=ws_role)
-            db.add(membership)
+            personal_ws = ensure_personal_default_workspace(db, user)
+            user.last_workspace_id = personal_ws.id
         except Exception as e:
-            print(f"Warning: Could not add user to default workspace: {e}", file=sys.stderr)
+            print(f"Warning: Could not create personal default workspace: {e}", file=sys.stderr)
 
         db.commit()
         db.refresh(user)

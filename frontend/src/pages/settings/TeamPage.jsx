@@ -254,12 +254,17 @@ export default function TeamPage() {
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3">
                         <div className="w-7 h-7 rounded-full bg-[#F5F5F4] border border-[#E7E5E4] flex items-center justify-center text-[11px] font-semibold text-[#1C1917] shrink-0">
-                          {getInitials(member.email)}
+                          {getInitials(member.full_name || member.email)}
                         </div>
                         <div className="min-w-0">
                           <p className="text-xs font-medium text-[#1C1917] truncate">
-                            {member.email}
+                            {member.full_name || member.email}
                           </p>
+                          {member.full_name && (
+                            <p className="text-[11px] text-[#78716C] truncate">
+                              {member.email}
+                            </p>
+                          )}
                           {isSelf(member) && (
                             <span className="text-[10px] text-[#78716C]">
                               (Current user)

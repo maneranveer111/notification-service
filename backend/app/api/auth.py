@@ -72,16 +72,40 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
     if membership:
         ws = db.get(Workspace, membership.workspace_id)
         if ws:
-            workspace_info = WorkspaceInfo(id=ws.id, name=ws.name, slug=ws.slug, role=membership.role)
+            is_def = bool(getattr(ws, "is_default", False))
+            workspace_info = WorkspaceInfo(
+                id=ws.id,
+                name=ws.name,
+                slug=ws.slug,
+                role=membership.role,
+                is_default=is_def,
+                deletable=(membership.role == "owner" and not is_def),
+            )
+
+    from app.services.tenancy import ensure_personal_default_workspace
+    ensure_personal_default_workspace(db, user)
 
     all_memberships = db.execute(
-        select(Membership).where(Membership.user_id == user.id)
+        select(Membership)
+        .join(Workspace, Workspace.id == Membership.workspace_id)
+        .where(Membership.user_id == user.id)
+        .order_by(Workspace.is_default.asc(), Membership.created_at.asc())
     ).scalars().all()
     workspaces_list: list[WorkspaceInfo] = []
     for m in all_memberships:
         wsi = db.get(Workspace, m.workspace_id)
         if wsi:
-            workspaces_list.append(WorkspaceInfo(id=wsi.id, name=wsi.name, slug=wsi.slug, role=m.role))
+            is_def = bool(getattr(wsi, "is_default", False))
+            workspaces_list.append(
+                WorkspaceInfo(
+                    id=wsi.id,
+                    name=wsi.name,
+                    slug=wsi.slug,
+                    role=m.role,
+                    is_default=is_def,
+                    deletable=(m.role == "owner" and not is_def),
+                )
+            )
 
     token = create_access_token(
         user_id=user.id,
@@ -100,6 +124,7 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
             email=user.email,
             role=user.role,
             full_name=user.full_name,
+            is_superadmin=user.is_superadmin,
         ),
         workspace=workspace_info,
         is_superadmin=user.is_superadmin,
@@ -111,28 +136,65 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
 def get_current_user_info(principal: Principal = Depends(get_user_principal), db: Session = Depends(get_db)):
     workspace_info = None
     workspaces = []
+    full_name = None
+    user_info = None
 
     if principal.user_id:
+        from app.models.user import User
+        from app.services.tenancy import ensure_personal_default_workspace
+        user = db.get(User, principal.user_id)
+        if user:
+            full_name = user.full_name
+            ensure_personal_default_workspace(db, user)
+            user_info = UserAuthInfo(
+                id=user.id,
+                email=user.email,
+                role=user.role,
+                full_name=user.full_name,
+                is_superadmin=user.is_superadmin,
+            )
+
         # Current workspace
         if principal.workspace_id:
             ws = db.get(Workspace, principal.workspace_id)
             if ws and principal.workspace_role:
+                is_def = bool(getattr(ws, "is_default", False))
                 workspace_info = WorkspaceInfo(
-                    id=ws.id, name=ws.name, slug=ws.slug, role=principal.workspace_role
+                    id=ws.id,
+                    name=ws.name,
+                    slug=ws.slug,
+                    role=principal.workspace_role,
+                    is_default=is_def,
+                    deletable=(principal.workspace_role == "owner" and not is_def),
                 )
 
         # All workspaces
         memberships = db.execute(
-            select(Membership).where(Membership.user_id == principal.user_id)
+            select(Membership)
+            .join(Workspace, Workspace.id == Membership.workspace_id)
+            .where(Membership.user_id == principal.user_id)
+            .order_by(Workspace.is_default.asc(), Membership.created_at.asc())
         ).scalars().all()
         for m in memberships:
             ws = db.get(Workspace, m.workspace_id)
             if ws:
-                workspaces.append(WorkspaceInfo(id=ws.id, name=ws.name, slug=ws.slug, role=m.role))
+                is_def = bool(getattr(ws, "is_default", False))
+                workspaces.append(
+                    WorkspaceInfo(
+                        id=ws.id,
+                        name=ws.name,
+                        slug=ws.slug,
+                        role=m.role,
+                        is_default=is_def,
+                        deletable=(m.role == "owner" and not is_def),
+                    )
+                )
 
     return AuthMeResponse(
         id=principal.user_id,
         email=principal.email,
+        full_name=full_name,
+        user=user_info,
         role=principal.role or "user",
         can_write=principal.can_write,
         is_admin=principal.is_admin,

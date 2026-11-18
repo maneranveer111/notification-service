@@ -37,6 +37,12 @@ class Workspace(Base):
         String(20),
         nullable=True,
     )
+    is_default: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default="false",
+        nullable=False,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

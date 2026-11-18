@@ -12,6 +12,7 @@ class UserAuthInfo(BaseModel):
     email: str
     role: str
     full_name: str | None = None
+    is_superadmin: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -21,6 +22,8 @@ class WorkspaceInfo(BaseModel):
     name: str
     slug: str
     role: str
+    is_default: bool = False
+    deletable: bool = False
 
 
 class TokenResponse(BaseModel):
@@ -36,6 +39,8 @@ class TokenResponse(BaseModel):
 class AuthMeResponse(BaseModel):
     id: UUID | None = None
     email: str | None = None
+    full_name: str | None = None
+    user: UserAuthInfo | None = None
     role: str
     can_write: bool
     is_admin: bool

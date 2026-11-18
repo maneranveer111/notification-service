@@ -138,10 +138,10 @@ def test_complete_platform_journey():
         token_su = data_su["access_token"]
         h_su = {"Authorization": f"Bearer {token_su}"}
 
-        # Verify default workspace is assigned to superadmin
+        # Verify superadmin has their own workspace, not the global platform default workspace
         db = SessionLocal()
         default_ws = get_default_workspace(db)
-        assert data_su["workspace"]["id"] == str(default_ws.id)
+        assert data_su["workspace"]["id"] != str(default_ws.id)
         assert default_ws.plan == "unlimited"
         db.close()
 

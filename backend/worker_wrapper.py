@@ -44,8 +44,7 @@ _startup_lock = threading.Lock()
 def start_celery():
     global _celery_proc, _worker_ready
     settings = get_settings()
-    q = settings.celery_queue or "notification_service_queue"
-    queue = f"{q}_high,{q},{q}_low"
+    queue = ",".join(settings.get_queue_names())
 
     cmd = [
         sys.executable,
@@ -58,8 +57,9 @@ def start_celery():
     ]
 
     if os.environ.get("ENABLE_BEAT") == "true":
-        schedule_file = os.path.join(tempfile.gettempdir(), "celerybeat-schedule")
-        cmd.extend(["-B", f"--schedule={schedule_file}"])
+        from scripts.scheduler import run_loop
+        beat_thread = threading.Thread(target=run_loop, kwargs={"interval": 30}, daemon=True)
+        beat_thread.start()
 
     # Serialize startup with shutdown. If shutdown was requested before we
     # began, skip launching Celery entirely. Holding the lock across Popen()

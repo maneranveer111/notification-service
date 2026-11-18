@@ -30,7 +30,11 @@ from app.services.jwt_tokens import create_access_token, decode_access_token
 from app.services.passwords import hash_password, verify_password
 from app.services.rate_limit import check_rate_limit
 from app.services.system_mail import queue_system_email
-from app.services.tenancy import generate_workspace_slug, get_default_workspace_id
+from app.services.tenancy import (
+    generate_workspace_slug,
+    get_default_workspace_id,
+    ensure_personal_default_workspace,
+)
 
 router = APIRouter(prefix="/auth", tags=["Accounts"])
 settings = get_settings()
@@ -81,6 +85,9 @@ class InvitationInfoResponse(BaseModel):
 
 
 def _build_token_response(user: User, db: Session, target_ws_id: UUID | None = None) -> TokenResponse:
+    # Ensure personal default workspace exists (self-healing)
+    ensure_personal_default_workspace(db, user)
+
     membership = None
     if target_ws_id:
         membership = db.get(Membership, (user.id, target_ws_id))
@@ -96,16 +103,37 @@ def _build_token_response(user: User, db: Session, target_ws_id: UUID | None = N
     if membership:
         ws = db.get(Workspace, membership.workspace_id)
         if ws:
-            workspace_info = WorkspaceInfo(id=ws.id, name=ws.name, slug=ws.slug, role=membership.role)
+            is_def = bool(getattr(ws, "is_default", False))
+            workspace_info = WorkspaceInfo(
+                id=ws.id,
+                name=ws.name,
+                slug=ws.slug,
+                role=membership.role,
+                is_default=is_def,
+                deletable=(membership.role == "owner" and not is_def),
+            )
 
     all_memberships = db.execute(
-        select(Membership).where(Membership.user_id == user.id)
+        select(Membership)
+        .join(Workspace, Workspace.id == Membership.workspace_id)
+        .where(Membership.user_id == user.id)
+        .order_by(Workspace.is_default.asc(), Membership.created_at.asc())
     ).scalars().all()
     workspaces_list: list[WorkspaceInfo] = []
     for m in all_memberships:
         wsi = db.get(Workspace, m.workspace_id)
         if wsi:
-            workspaces_list.append(WorkspaceInfo(id=wsi.id, name=wsi.name, slug=wsi.slug, role=m.role))
+            is_def = bool(getattr(wsi, "is_default", False))
+            workspaces_list.append(
+                WorkspaceInfo(
+                    id=wsi.id,
+                    name=wsi.name,
+                    slug=wsi.slug,
+                    role=m.role,
+                    is_default=is_def,
+                    deletable=(m.role == "owner" and not is_def),
+                )
+            )
 
     token = create_access_token(
         user_id=user.id,
@@ -124,6 +152,7 @@ def _build_token_response(user: User, db: Session, target_ws_id: UUID | None = N
             email=user.email,
             role=user.role,
             full_name=user.full_name,
+            is_superadmin=user.is_superadmin,
         ),
         workspace=workspace_info,
         is_superadmin=user.is_superadmin,
@@ -151,14 +180,32 @@ def signup(request: Request, payload: SignupRequest, db: Session = Depends(get_d
         pass
     user_count = db.scalar(select(func.count(User.id))) or 0
     if user_count == 0:
-        default_ws_id = get_default_workspace_id(db)
+        # Ensure global default workspace exists (is_default=True, platform providers)
+        from app.services.tenancy import ensure_default_workspace
+        ensure_default_workspace(db)
 
-        # Optionally rename the default workspace (keep slug=default, plan=unlimited).
-        ws_name = (payload.workspace_name or "").strip()
-        if ws_name and 1 <= len(ws_name) <= 100:
-            default_ws = db.get(Workspace, default_ws_id)
-            if default_ws:
-                default_ws.name = ws_name
+        # First user: create their personal Default workspace + named workspace
+        ws_name = (payload.workspace_name or f"{target_email.split('@')[0]}'s Workspace").strip()
+
+        # Personal default workspace (private, is_default=True)
+        personal_default_slug = f"default-{secrets.token_hex(4)}"
+        personal_default_ws = Workspace(
+            name="Default",
+            slug=personal_default_slug,
+            is_default=True,
+            webhook_token=secrets.token_urlsafe(32),
+        )
+        db.add(personal_default_ws)
+        db.flush()
+
+        # Named workspace (the active one)
+        named_ws = Workspace(
+            name=ws_name,
+            slug=generate_workspace_slug(ws_name),
+            webhook_token=secrets.token_urlsafe(32),
+        )
+        db.add(named_ws)
+        db.flush()
 
         if settings.require_email_verification:
             verified_at: datetime | None = None
@@ -172,14 +219,15 @@ def signup(request: Request, payload: SignupRequest, db: Session = Depends(get_d
             is_superadmin=True,
             is_active=True,
             email_verified_at=verified_at,
-            last_workspace_id=default_ws_id,
+            last_workspace_id=named_ws.id,
             full_name=(payload.full_name or '').strip() or None,
         )
         db.add(user)
         db.flush()
 
-        mem = Membership(user_id=user.id, workspace_id=default_ws_id, role="owner")
-        db.add(mem)
+        # Memberships: personal default + named workspace
+        db.add(Membership(user_id=user.id, workspace_id=personal_default_ws.id, role="owner"))
+        db.add(Membership(user_id=user.id, workspace_id=named_ws.id, role="owner"))
         db.commit()
         db.refresh(user)
 
@@ -194,9 +242,12 @@ def signup(request: Request, payload: SignupRequest, db: Session = Depends(get_d
             link = f"{settings.frontend_public_url}/verify-email?token={token}"
             subject, body = verification_email(link)
             if queue_system_email(target_email, subject, body):
+                content = {"message": "Verification email sent", "email": target_email}
+                if settings.environment == "development" and settings.system_mail_backend == "console":
+                    content["dev_verification_link"] = link
                 return JSONResponse(
                     status_code=status.HTTP_202_ACCEPTED,
-                    content={"message": "Verification email sent", "email": target_email},
+                    content=content,
                 )
             return JSONResponse(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -207,7 +258,7 @@ def signup(request: Request, payload: SignupRequest, db: Session = Depends(get_d
                 },
             )
 
-        res = _build_token_response(user, db, default_ws_id)
+        res = _build_token_response(user, db, named_ws.id)
         return JSONResponse(status_code=status.HTTP_201_CREATED, content=res.model_dump(mode="json"))
 
     if settings.signup_mode == "invite_only":
@@ -292,22 +343,17 @@ def signup(request: Request, payload: SignupRequest, db: Session = Depends(get_d
         mem = Membership(user_id=user.id, workspace_id=ws.id, role="owner")
         db.add(mem)
 
-        # Ensure protected Default Workspace exists and user has membership in it
-        default_ws = db.scalar(select(Workspace).where(Workspace.slug == "default"))
-        if not default_ws:
-            default_ws = Workspace(
-                name="Default Workspace",
-                slug="default",
-                plan="unlimited",
-                webhook_token=secrets.token_urlsafe(32),
-                use_platform_providers=True,
-            )
-            db.add(default_ws)
-            db.flush()
-
-        def_mem = db.get(Membership, (user.id, default_ws.id))
-        if not def_mem:
-            db.add(Membership(user_id=user.id, workspace_id=default_ws.id, role="owner"))
+        # Create the user's personal Default workspace (is_default=True)
+        personal_default_slug = f"default-{secrets.token_hex(4)}"
+        personal_default_ws = Workspace(
+            name="Default",
+            slug=personal_default_slug,
+            is_default=True,
+            webhook_token=secrets.token_urlsafe(32),
+        )
+        db.add(personal_default_ws)
+        db.flush()
+        db.add(Membership(user_id=user.id, workspace_id=personal_default_ws.id, role="owner"))
 
         db.commit()
         db.refresh(user)
@@ -346,9 +392,12 @@ def signup(request: Request, payload: SignupRequest, db: Session = Depends(get_d
             # Rate limiter permits: queue the verification email. Preserve the
             # existing 503 for an actual enqueue failure.
             if queue_system_email(target_email, subject, body):
+                content = {"message": "Verification email sent", "email": target_email}
+                if settings.environment == "development" and settings.system_mail_backend == "console":
+                    content["dev_verification_link"] = link
                 return JSONResponse(
                     status_code=status.HTTP_202_ACCEPTED,
-                    content={"message": "Verification email sent", "email": target_email},
+                    content=content,
                 )
             return JSONResponse(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

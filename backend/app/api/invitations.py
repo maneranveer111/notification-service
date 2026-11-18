@@ -12,6 +12,8 @@ from app.database import get_db
 from app.models.invitation import Invitation
 from app.models.user import User
 from app.models.workspace import Membership, Workspace
+from app.schemas.auth import UserAuthInfo, WorkspaceInfo
+from app.services.tenancy import ensure_personal_default_workspace
 from app.security import Principal, get_user_principal, require_admin
 from app.services.account_emails import invitation_email
 from app.services.action_tokens import make_invite_token
@@ -346,6 +348,9 @@ class AcceptInvitationResponse(BaseModel):
     workspace_name: str
     role: str
     status: str
+    workspace: WorkspaceInfo | None = None
+    workspaces: list[WorkspaceInfo] = []
+    user: UserAuthInfo | None = None
 
 
 class DeclineInvitationResponse(BaseModel):
@@ -452,10 +457,60 @@ def accept_user_invitation(
     db.add(mem)
     invitation.status = "accepted"
     invitation.accepted_at = now
+
+    user = db.get(User, principal.user_id)
+    if user:
+        ensure_personal_default_workspace(db, user)
+        user.last_workspace_id = invitation.workspace_id
+
     db.commit()
     db.refresh(mem)
 
     ws = db.get(Workspace, invitation.workspace_id)
+    ws_info = None
+    if ws:
+        is_def = bool(getattr(ws, "is_default", False))
+        ws_info = WorkspaceInfo(
+            id=ws.id,
+            name=ws.name,
+            slug=ws.slug,
+            role=invitation.role,
+            is_default=is_def,
+            deletable=(invitation.role == "owner" and not is_def),
+        )
+
+    all_memberships = db.execute(
+        select(Membership)
+        .join(Workspace, Workspace.id == Membership.workspace_id)
+        .where(Membership.user_id == principal.user_id)
+        .order_by(Workspace.is_default.asc(), Membership.created_at.asc())
+    ).scalars().all()
+    workspaces_list: list[WorkspaceInfo] = []
+    for m in all_memberships:
+        wsi = db.get(Workspace, m.workspace_id)
+        if wsi:
+            is_def = bool(getattr(wsi, "is_default", False))
+            workspaces_list.append(
+                WorkspaceInfo(
+                    id=wsi.id,
+                    name=wsi.name,
+                    slug=wsi.slug,
+                    role=m.role,
+                    is_default=is_def,
+                    deletable=(m.role == "owner" and not is_def),
+                )
+            )
+
+    user_info = None
+    if user:
+        user_info = UserAuthInfo(
+            id=user.id,
+            email=user.email,
+            role=user.role,
+            full_name=user.full_name,
+            is_superadmin=user.is_superadmin,
+        )
+
     return AcceptInvitationResponse(
         message="Invitation accepted",
         id=invitation.id,
@@ -463,6 +518,9 @@ def accept_user_invitation(
         workspace_name=ws.name if ws else "Workspace",
         role=invitation.role,
         status="accepted",
+        workspace=ws_info,
+        workspaces=workspaces_list,
+        user=user_info,
     )
 
 

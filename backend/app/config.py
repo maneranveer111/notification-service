@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     db_pool_recycle: int = 1800  
     celery_queue: str = "notification_service_queue"
 
+    def get_queue_names(self) -> list[str]:
+        q = self.celery_queue or "notification_service_queue"
+        return [f"{q}_high", q, f"{q}_low"]
+
     public_base_url: str = "http://localhost:8001"
     webhook_secret: str | None = None
     webhook_verify: bool = True

@@ -73,6 +73,21 @@ configure_logging()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     validate_production_or_raise(settings)
+    logging.getLogger("app.main").info(
+        "Startup settings: environment=%s, signup_mode=%s, require_email_verification=%s, system_mail_backend=%s, queues=%s",
+        settings.environment,
+        settings.signup_mode,
+        settings.require_email_verification,
+        settings.system_mail_backend,
+        settings.get_queue_names(),
+    )
+    from app.database import SessionLocal
+    from app.services.tenancy import ensure_default_workspace
+    try:
+        with SessionLocal() as db:
+            ensure_default_workspace(db)
+    except Exception:
+        logging.getLogger("app.main").error("Database is not migrated: run python -m scripts.migrate")
     yield
 
 
@@ -223,11 +238,7 @@ def health_deep(
 
     redis_status = "error"
     queues = {}
-    q_names = [
-        settings.celery_queue,
-        f"{settings.celery_queue}_high",
-        f"{settings.celery_queue}_low",
-    ]
+    q_names = settings.get_queue_names()
     try:
         from app.services.rate_limit import get_redis_client
         r = get_redis_client()
@@ -262,11 +273,39 @@ def health_deep(
     except Exception:
         pass
 
+    migrations_status = "unknown"
+    try:
+        from alembic.migration import MigrationContext
+        from alembic.script import ScriptDirectory
+        from alembic.config import Config
+
+        ini_path = "backend/alembic.ini" if os.path.exists("backend/alembic.ini") else "alembic.ini"
+        alembic_cfg = Config(ini_path)
+        alembic_cfg.set_main_option(
+            "script_location",
+            "backend/alembic" if os.path.exists("backend/alembic") else "alembic",
+        )
+        script = ScriptDirectory.from_config(alembic_cfg)
+        head_rev = script.get_current_head()
+
+        bind = db.get_bind()
+        with bind.connect() as conn:
+            context = MigrationContext.configure(conn)
+            current_rev = context.get_current_revision()
+
+        if current_rev == head_rev and head_rev is not None:
+            migrations_status = "ok"
+        else:
+            migrations_status = "behind"
+    except Exception:
+        migrations_status = "unknown"
+
     return {
         "db": db_status,
         "redis": redis_status,
         "worker": worker_status,
         "beat": beat_status,
+        "migrations": migrations_status,
         "queues": queues,
         "environment": settings.environment,
         "version": os.environ.get("APP_VERSION", "dev"),

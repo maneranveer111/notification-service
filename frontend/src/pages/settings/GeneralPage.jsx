@@ -320,9 +320,7 @@ export default function GeneralPage() {
               </p>
             </div>
             <div>
-              {workspace?.slug === 'default' ? (
-                <span className="text-xs text-[#78716C] italic">The default workspace cannot be deleted.</span>
-              ) : (
+              {canDeleteWorkspace(workspace, role) ? (
                 <Button
                   variant="destructive-filled"
                   size="sm"
@@ -330,6 +328,8 @@ export default function GeneralPage() {
                 >
                   Delete workspace
                 </Button>
+              ) : (
+                <span className="text-xs text-[#78716C] italic">This is your default workspace and cannot be deleted.</span>
               )}
             </div>
           </div>

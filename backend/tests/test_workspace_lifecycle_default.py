@@ -85,9 +85,9 @@ def test_new_signup_creates_custom_and_default_workspace(db):
     assert data["workspace"]["slug"] != "default"
 
     # Workspace selector list must contain both the custom workspace and Default Workspace
-    ws_slugs = [w["slug"] for w in data["workspaces"]]
-    assert "default" in ws_slugs
-    assert data["workspace"]["slug"] in ws_slugs
+    ws_defaults = [w["is_default"] for w in data["workspaces"]]
+    assert True in ws_defaults
+    assert False in ws_defaults
     assert len(data["workspaces"]) == 2
 
     # Login and verify landing in the custom workspace
@@ -121,7 +121,7 @@ def test_switch_between_custom_and_default_workspace(db):
     verify_data = client.post("/auth/verify-email", json={"token": token_match.group(1)}).json()
 
     custom_ws = verify_data["workspace"]
-    default_ws = next(w for w in verify_data["workspaces"] if w["slug"] == "default")
+    default_ws = next(w for w in verify_data["workspaces"] if w["is_default"] is True)
     token = verify_data["access_token"]
 
     # Switch to Default Workspace
@@ -170,7 +170,7 @@ def test_delete_custom_workspace_auto_switches_to_default_workspace(db):
     verify_data = client.post("/auth/verify-email", json={"token": token_match.group(1)}).json()
     token = verify_data["access_token"]
     custom_ws = verify_data["workspace"]
-    default_ws = next(w for w in verify_data["workspaces"] if w["slug"] == "default")
+    default_ws = next(w for w in verify_data["workspaces"] if w["is_default"] is True)
 
     # Delete custom workspace
     del_resp = client.post(
@@ -186,7 +186,7 @@ def test_delete_custom_workspace_auto_switches_to_default_workspace(db):
     # Switched automatically to Default Workspace
     switched_login = del_data["login"]
     assert switched_login["workspace"]["id"] == default_ws["id"]
-    assert switched_login["workspace"]["slug"] == "default"
+    assert switched_login["workspace"]["is_default"] is True
 
     # User can continue using the application with the new token
     new_token = switched_login["access_token"]
@@ -213,7 +213,7 @@ def test_protect_default_workspace_from_deletion(db):
 
     token_match = re.search(r"token=([A-Za-z0-9_\-\.]+)", captured[-1])
     verify_data = client.post("/auth/verify-email", json={"token": token_match.group(1)}).json()
-    default_ws = next(w for w in verify_data["workspaces"] if w["slug"] == "default")
+    default_ws = next(w for w in verify_data["workspaces"] if w["is_default"] is True)
     token = verify_data["access_token"]
 
     # Switch to Default Workspace
@@ -231,7 +231,7 @@ def test_protect_default_workspace_from_deletion(db):
         json={"confirm_name": default_ws["name"], "password": "Password123!"},
     )
     assert del_resp.status_code == 409
-    assert "default workspace cannot be deleted" in del_resp.json()["detail"].lower()
+    assert "cannot be deleted" in del_resp.json()["detail"].lower()
 
     # Verify Default Workspace still exists
     def_ws_row = db.get(Workspace, default_ws["id"])
